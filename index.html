@@ -193,16 +193,29 @@
                         setupCheckboxLimit();
 
                         // 데이터 파싱 및 저장
-                        initialData = parseJsonToObjects(json, availableHeaders);
+                        const rawData = parseJsonToObjects(json, availableHeaders);
+                        
+                        // --- 중복 제거 피드백 로직 시작 ---
+                        const selectedKeys = Array.from(document.querySelectorAll('input[name="duplicateKey"]:checked')).map(cb => cb.value);
+                        
+                        // 중복 키가 선택되지 않았더라도, 모든 데이터를 초기 데이터로 설정
+                        initialData = rawData; 
+
+                        // 선택된 키를 기반으로 초기 중복 제거 수행 (finalWinners가 없으므로 빈 배열 전달)
                         availableData = removeDuplicates(initialData, []); 
+                        
+                        const duplicatedCount = initialData.length - availableData.length;
+                        
+                        // --- 중복 제거 피드백 로직 끝 ---
+                        
                         finalWinners = []; // 새 파일 로드 시 최종 목록 초기화
                         currentRound = 1; // 새 파일 로드 시 회차 초기화
 
-                        fileStatus.textContent = `파일 "${file.name}"이 성공적으로 로드되었습니다. 총 ${availableHeaders.length}개 컬럼, ${availableData.length}개 고유 행이 확인되었습니다.`;
+                        fileStatus.textContent = `파일 "${file.name}"이 성공적으로 로드되었습니다. 총 ${availableHeaders.length}개 컬럼, ${initialData.length}개 행이 확인되었으며, **${duplicatedCount}개**의 중복이 제거되어 ${availableData.length}개 고유 데이터가 추첨 가능합니다.`;
                         fileStatus.style.display = 'block';
                         fileStatus.classList.remove('error');
                         updateRemainingCount();
-                        renderFinalData(); // 최종 목록 비우기
+                        renderFinalData(); 
 
                     } else {
                         fileStatus.textContent = '엑셀 파일에 데이터가 없거나 형식이 올바르지 않습니다.';
@@ -303,6 +316,7 @@
                 return;
             }
 
+            // 현재 남은 데이터 목록을 중복 제거 및 확정 목록 제외하여 갱신
             availableData = removeDuplicates(initialData, finalWinners); 
             
             if (availableData.length === 0) {
@@ -360,7 +374,6 @@
             const thead = table.createTHead();
             const tbody = table.createTBody();
             
-            // 최종 목록일 경우에만 추가적인 회차/방법 컬럼을 사용합니다.
             const displayHeaders = isExtractedList 
                 ? availableHeaders
                 : [...availableHeaders, 'Winning Round', 'Entry Method']; 
@@ -385,14 +398,12 @@
                     input.type = 'text';
                     input.classList.add('data-input');
                     
-                    // 필드 값 설정 (회차/방법은 읽기 전용)
                     if (header === 'Winning Round' || header === 'Entry Method') {
                         input.value = item[header] || '';
                         input.readOnly = true; 
                         input.style.backgroundColor = '#f0f0f0';
                     } else {
                         input.value = item[header] || '';
-                        // 입력 값 변경 시 데이터 객체 업데이트
                         input.onchange = (e) => {
                             item[header] = e.target.value.trim();
                         };
@@ -418,7 +429,6 @@
                             updateRemainingCount();
                             alert('확정 목록에서 삭제되었습니다. 해당 데이터는 이제 재추첨 가능합니다.');
                         } else if (deletedItem && deletedItem['Entry Method'] === 'Manual Add') {
-                            // 수동 추가된 데이터는 원본 initialData에 복구할 필요 없음
                             alert('수동 추가된 항목이 최종 목록에서 삭제되었습니다.');
                         }
                     }
@@ -512,7 +522,6 @@
                 });
                 
                 if (Object.keys(newObject).length > 0 && isValid) {
-                    // 수동 추가 시 회차 정보 및 방법을 기록
                     newObject['Winning Round'] = 'Manual';
                     newObject['Entry Method'] = 'Manual Add';
 
@@ -535,7 +544,6 @@
                 return;
             }
 
-            // 다운로드 시 "No." 컬럼을 추가
             const exportData = finalWinners.map((item, index) => {
                  return { "No.": index + 1, ...item };
             });
