@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>엑셀 데이터 취합 및 랜덤 추출 도구</title>
+    <title>단일 엑셀 파일 중복 제거 및 랜덤 추출 도구</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; background-color: #f4f4f4; color: #333; }
@@ -21,6 +21,8 @@
         .control-group { margin-bottom: 15px; }
         .control-group label { display: block; margin-bottom: 5px; font-weight: bold; }
         .control-group input[type="number"], .control-group select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100px; margin-right: 10px; }
+        .checkbox-group { display: flex; gap: 15px; margin-top: 10px; }
+        .checkbox-group label { font-weight: normal; }
         .add-data-input { display: flex; margin-top: 10px; }
         .add-data-input input { flex-grow: 1; margin-right: 10px; }
         .feedback { margin-top: 15px; padding: 10px; background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 5px; display: none; }
@@ -29,32 +31,31 @@
 </head>
 <body>
     <div class="container">
-        <h1>엑셀 데이터 취합 및 랜덤 추출 도구</h1>
-        <p>여러 엑셀 파일을 업로드하여 데이터를 취합하고, 중복을 제거한 후 원하는 개수만큼 랜덤 추출할 수 있습니다.</p>
+        <h1>단일 엑셀 파일 중복 제거 및 랜덤 추출 도구</h1>
+        <p>엑셀 파일을 1개 업로드하여 중복을 제거한 후 원하는 개수만큼 랜덤 추출할 수 있습니다.</p>
 
         <div class="control-group">
-            <label for="fileInput">1. 엑셀 파일 선택 (여러 파일 선택 가능)</label>
-            <input type="file" id="fileInput" multiple accept=".xlsx, .xls, .csv">
-            <button onclick="processFiles()">파일 처리 및 취합</button>
-            <div id="fileStatus" class="feedback"></div>
+            <label for="fileInput">1. 엑셀 파일 선택 (1개만 선택 가능)</label>
+            <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
         </div>
 
         <div class="controls">
-            <h2>2. 데이터 추출 설정</h2>
+            <h2>2. 중복 제거 및 추출 설정</h2>
             <div class="control-group">
-                <label for="duplicateKey">중복 제거 기준 컬럼:</label>
-                <select id="duplicateKey">
-                    <option value="핸드폰번호">핸드폰번호</option>
-                    <option value="지갑주소">지갑주소</option>
-                    <option value="텔레그램 핸들">텔레그램 핸들</option>
-                    <option value="트위터 핸들">트위터 핸들</option>
-                    </select>
+                <label>중복 제거 기준 컬럼 선택 (최대 2개):</label>
+                <div class="checkbox-group" id="duplicateKeyCheckboxes">
+                    <label><input type="checkbox" name="duplicateKey" value="핸드폰번호"> 핸드폰번호</label>
+                    <label><input type="checkbox" name="duplicateKey" value="지갑주소"> 지갑주소</label>
+                    <label><input type="checkbox" name="duplicateKey" value="텔레그램 핸들"> 텔레그램 핸들</label>
+                    <label><input type="checkbox" name="duplicateKey" value="트위터 핸들"> 트위터 핸들</label>
+                </div>
             </div>
             <div class="control-group">
                 <label for="extractCount">추출할 데이터 개수:</label>
                 <input type="number" id="extractCount" value="100" min="1">
-                <button onclick="extractRandomData()">랜덤 추출</button>
+                <button onclick="processAndExtract()">파일 처리 및 랜덤 추출</button>
             </div>
+            <div id="fileStatus" class="feedback"></div>
         </div>
 
         <div class="controls">
@@ -63,7 +64,7 @@
                 <p>추출된 데이터가 없습니다.</p>
             </div>
             <div class="add-data-input">
-                <input type="text" id="newDataInput" placeholder="추가할 데이터 (예: 핸드폰번호, 텔레그램 핸들, 지갑주소...)">
+                <input type="text" id="newDataInput" placeholder="추가할 데이터 (예: 핸드폰번호: 010-..., 지갑주소: 0x...)">
                 <button onclick="addData()">추가</button>
             </div>
             <button onclick="downloadResult()">결과 엑셀 다운로드</button>
@@ -71,122 +72,131 @@
     </div>
 
     <script>
-        let allProcessedData = []; // 모든 파일에서 취합된, 중복 제거된 원본 데이터
-        let extractedData = [];   // 랜덤 추출되어 현재 화면에 표시되는 데이터
+        let allProcessedData = []; 
+        let extractedData = [];   
 
-        // 파일 처리 및 취합
-        function processFiles() {
+        // 체크박스 선택 제한 로직 (최대 2개)
+        document.addEventListener('DOMContentLoaded', () => {
+            const checkboxes = document.querySelectorAll('input[name="duplicateKey"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const checkedCount = document.querySelectorAll('input[name="duplicateKey"]:checked').length;
+                    if (checkedCount > 2) {
+                        this.checked = false; // 3개 이상 선택 시 마지막 선택 해제
+                        alert('중복 제거 기준 컬럼은 최대 2개까지만 선택할 수 있습니다.');
+                    }
+                });
+            });
+        });
+
+        // 파일 처리, 중복 제거 및 추출을 한 번에 수행
+        function processAndExtract() {
             const fileInput = document.getElementById('fileInput');
-            const files = fileInput.files;
+            const file = fileInput.files[0];
             const fileStatus = document.getElementById('fileStatus');
             fileStatus.style.display = 'none';
             fileStatus.classList.remove('error');
             fileStatus.textContent = '';
+            allProcessedData = []; 
 
-            if (files.length === 0) {
-                fileStatus.textContent = '파일을 선택해주세요.';
+            const selectedKeys = Array.from(document.querySelectorAll('input[name="duplicateKey"]:checked')).map(cb => cb.value);
+
+            if (!file) {
+                fileStatus.textContent = '먼저 엑셀 파일을 선택해주세요.';
+                fileStatus.classList.add('error');
+                fileStatus.style.display = 'block';
+                return;
+            }
+            if (selectedKeys.length === 0) {
+                fileStatus.textContent = '중복 제거 기준 컬럼을 1개 또는 2개 선택해주세요.';
                 fileStatus.classList.add('error');
                 fileStatus.style.display = 'block';
                 return;
             }
 
-            allProcessedData = [];
-            const promises = [];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0]; 
+                    const worksheet = workbook.Sheets[sheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const reader = new FileReader();
+                    // 데이터 파싱
+                    if (json.length > 0) {
+                        const headers = json[0].map(h => h ? String(h).trim() : ''); // 헤더 공백 제거
+                        
+                        // 중복 제거
+                        const uniqueData = {};
+                        for (let j = 1; j < json.length; j++) {
+                            const row = json[j];
+                            let rowObject = {};
+                            headers.forEach((header, index) => {
+                                // 빈 값도 처리 가능하도록
+                                rowObject[header] = row[index] !== undefined && row[index] !== null ? row[index] : ''; 
+                            });
 
-                promises.push(new Promise((resolve, reject) => {
-                    reader.onload = function(e) {
-                        try {
-                            const data = new Uint8Array(e.target.result);
-                            const workbook = XLSX.read(data, { type: 'array' });
-                            const sheetName = workbook.SheetNames[0]; // 첫 번째 시트 사용
-                            const worksheet = workbook.Sheets[sheetName];
-                            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-                            // 첫 번째 행을 헤더로 가정하고 파싱
-                            if (json.length > 0) {
-                                const headers = json[0];
-                                for (let j = 1; j < json.length; j++) {
-                                    const row = json[j];
-                                    let rowObject = {};
-                                    headers.forEach((header, index) => {
-                                        rowObject[header ? String(header).trim() : `Column${index}`] = row[index];
-                                    });
-                                    allProcessedData.push(rowObject);
-                                }
+                            // 중복 제거 키 생성: 선택된 1개 또는 2개 컬럼의 값을 결합
+                            const uniqueKey = selectedKeys.map(key => String(rowObject[key] || '').trim().toLowerCase()).join('|||');
+                            
+                            // 키가 존재하고 비어있지 않은 경우에만 저장
+                            if (uniqueKey.replace(/\|\|\|/g, '').length > 0) {
+                                uniqueData[uniqueKey] = rowObject; 
                             }
-                            resolve();
-                        } catch (error) {
-                            console.error(`Error reading file ${file.name}:`, error);
-                            reject(`파일 ${file.name} 처리 중 오류 발생: ${error.message}`);
                         }
-                    };
-                    reader.onerror = function(error) {
-                        console.error(`Error reading file ${file.name}:`, error);
-                        reject(`파일 ${file.name} 읽기 오류: ${error.message}`);
-                    };
-                    reader.readAsArrayBuffer(file);
-                }));
-            }
+                        allProcessedData = Object.values(uniqueData);
+                    }
 
-            Promise.all(promises)
-                .then(() => {
-                    // 중복 제거
-                    const duplicateKey = document.getElementById('duplicateKey').value;
-                    const uniqueData = {};
-                    allProcessedData.forEach(row => {
-                        const key = row[duplicateKey];
-                        if (key !== undefined && key !== null && String(key).trim() !== '') {
-                            uniqueData[String(key).trim()] = row; // 마지막으로 등장하는 데이터로 덮어씌움
-                        }
-                    });
-                    allProcessedData = Object.values(uniqueData);
+                    // 추출 로직 실행
+                    extractRandomData();
 
-                    fileStatus.textContent = `총 ${allProcessedData.length}개의 고유 데이터가 성공적으로 취합되었습니다.`;
+                    fileStatus.textContent = `총 ${allProcessedData.length}개의 고유 데이터가 성공적으로 처리되었습니다.`;
                     fileStatus.style.display = 'block';
                     fileStatus.classList.remove('error');
-                    console.log('All processed data (unique):', allProcessedData);
-                })
-                .catch(error => {
-                    fileStatus.textContent = error;
+
+                } catch (error) {
+                    console.error(`Error reading file:`, error);
+                    fileStatus.textContent = `파일 처리 중 오류 발생: ${error.message}`;
                     fileStatus.classList.add('error');
                     fileStatus.style.display = 'block';
-                });
+                }
+            };
+            reader.readAsArrayBuffer(file);
         }
 
-        // 랜덤 데이터 추출
+        // 랜덤 데이터 추출 (이전 로직 유지)
         function extractRandomData() {
             const extractCount = parseInt(document.getElementById('extractCount').value);
             const extractedDataListDiv = document.getElementById('extractedDataList');
-            extractedDataListDiv.innerHTML = ''; // 기존 목록 초기화
+            extractedDataListDiv.innerHTML = ''; 
 
             if (allProcessedData.length === 0) {
-                extractedDataListDiv.innerHTML = '<p>먼저 파일을 처리하여 데이터를 취합해주세요.</p>';
+                extractedDataListDiv.innerHTML = '<p>처리된 데이터가 없습니다. 파일을 먼저 처리해주세요.</p>';
+                extractedData = [];
                 return;
             }
             if (extractCount <= 0 || isNaN(extractCount)) {
                 extractedDataListDiv.innerHTML = '<p>유효한 추출 개수를 입력해주세요.</p>';
+                extractedData = [];
                 return;
             }
+            
+            // 데이터 섞고 자르기
             if (extractCount > allProcessedData.length) {
-                extractedDataListDiv.innerHTML = `<p>요청한 개수(${extractCount}개)가 전체 데이터(${allProcessedData.length}개)보다 많습니다. 가능한 모든 데이터를 추출합니다.</p>`;
                 extractedData = [...allProcessedData];
             } else {
-                // 데이터를 섞고 원하는 개수만큼 자르기
                 const shuffled = [...allProcessedData].sort(() => 0.5 - Math.random());
                 extractedData = shuffled.slice(0, extractCount);
             }
-
+            
             renderExtractedData();
         }
 
-        // 추출된 데이터를 화면에 렌더링
+        // 추출된 데이터를 화면에 렌더링 (이전 로직 유지)
         function renderExtractedData() {
             const extractedDataListDiv = document.getElementById('extractedDataList');
-            extractedDataListDiv.innerHTML = ''; // 기존 목록 초기화
+            extractedDataListDiv.innerHTML = ''; 
 
             if (extractedData.length === 0) {
                 extractedDataListDiv.innerHTML = '<p>추출된 데이터가 없습니다.</p>';
@@ -196,16 +206,18 @@
             extractedData.forEach((item, index) => {
                 const itemDiv = document.createElement('div');
                 itemDiv.classList.add('result-item');
-                itemDiv.dataset.index = index; // 인덱스 저장
+                itemDiv.dataset.index = index; 
 
                 const inputField = document.createElement('input');
                 inputField.type = 'text';
-                // 객체를 문자열로 표시
+                // 객체를 "키: 값, 키: 값" 문자열로 표시
                 inputField.value = Object.entries(item)
-                                       .filter(([key, value]) => value !== undefined && value !== null && String(value).trim() !== '') // 비어있지 않은 값만 표시
+                                       .filter(([key, value]) => value !== undefined && value !== null && String(value).trim() !== '') 
                                        .map(([key, value]) => `${key}: ${value}`)
                                        .join(', ');
-                inputField.onchange = (e) => updateData(index, e.target.value);
+                
+                // 사용자가 텍스트를 수정하면 extractedData를 업데이트할 준비
+                inputField.onchange = (e) => updateData(index, e.target.value); 
 
                 const controlButtonsDiv = document.createElement('div');
                 controlButtonsDiv.classList.add('control-buttons');
@@ -222,73 +234,76 @@
             });
         }
 
-        // 데이터 수정
+        // 데이터 수정 (간단한 로직으로 수정)
         function updateData(index, newValueString) {
-            // 여기서는 간단히 문자열 자체를 업데이트하도록 처리합니다.
-            // 더 복잡한 객체 업데이트가 필요하다면 newValueString을 파싱하는 로직이 필요합니다.
-            // 예: "핸드폰번호: 010-1234-5678, 지갑주소: 0x..." -> 파싱하여 객체로 변환
-            
-            // 현재는 간단히 원본 데이터 객체를 그대로 유지하고, 화면에 보이는 텍스트만 변경된 것으로 간주합니다.
-            // 만약 실제로 객체 내부의 특정 값을 변경하고 싶다면, 파싱 로직을 구현해야 합니다.
-            // 예시: newValueString을 파싱하여 { '핸드폰번호': '...', '지갑주소': '...' } 형태로 만들고 extractedData[index]를 업데이트.
+            // "키: 값" 형태의 문자열을 다시 객체로 변환하는 간단한 파싱
+            const parts = newValueString.split(',').map(part => part.trim()).filter(part => part.includes(':'));
+            let updatedObject = {};
+            parts.forEach(part => {
+                const [key, value] = part.split(':').map(s => s.trim());
+                if (key && value) {
+                    updatedObject[key] = value;
+                }
+            });
 
-            // 현재 구현에서는 단순히 입력된 텍스트 자체를 저장하지 않고, 
-            // 원래 객체를 유지하되, 이 함수가 호출되면 사용자가 수정했다는 것을 인지하는 정도로만 둡니다.
-            // 실제 추출된 데이터(extractedData)를 업데이트하려면, 
-            // `newValueString`을 분석해서 기존 `extractedData[index]` 객체의 특정 필드를 업데이트해야 합니다.
-            // 현재는 추출된 데이터 객체 자체를 수정하는 기능은 구현하지 않았습니다.
-            // 사용자가 입력 필드를 변경했을 때, 그 변경사항이 `extractedData` 배열에 반영되도록 하려면
-            // 더 복잡한 파싱 로직이 필요합니다.
-            console.log(`Index ${index} updated with: ${newValueString}`);
+            if (Object.keys(updatedObject).length > 0) {
+                extractedData[index] = updatedObject;
+            } else {
+                console.warn("유효한 '키: 값' 쌍을 찾을 수 없어 데이터 업데이트를 건너뜁니다.");
+            }
+            // 업데이트 후 렌더링은 필요 없지만, 즉시 반영을 위해 호출 가능
+            // renderExtractedData(); 
         }
 
-        // 데이터 삭제
+        // 데이터 삭제 (이전 로직 유지)
         function deleteData(index) {
             extractedData.splice(index, 1);
             renderExtractedData();
         }
 
-        // 데이터 추가
+        // 데이터 추가 (파싱 로직 추가)
         function addData() {
             const newDataInput = document.getElementById('newDataInput');
             const newValueString = newDataInput.value.trim();
 
             if (newValueString) {
-                // 추가되는 데이터는 간단히 하나의 '데이터' 컬럼을 가진 객체로 가정합니다.
-                // 만약 여러 컬럼을 가진 객체로 추가하려면, newValueString을 파싱하는 로직이 필요합니다.
-                // 예: "핸드폰번호: 010-1234-5678, 지갑주소: 0x..." -> { '핸드폰번호': '010-1234-5678', '지갑주소': '0x...' }
+                // "키: 값" 형태의 문자열을 객체로 파싱 (updateData와 동일)
+                const parts = newValueString.split(',').map(part => part.trim()).filter(part => part.includes(':'));
+                let newObject = {};
+                parts.forEach(part => {
+                    const [key, value] = part.split(':').map(s => s.trim());
+                    if (key && value) {
+                        newObject[key] = value;
+                    }
+                });
                 
-                // 여기서는 입력된 문자열 전체를 "Raw_Data"라는 키로 저장하는 객체로 추가합니다.
-                // 실제 사용 시에는 이 부분을 적절히 수정하여 필요한 컬럼명에 맞게 파싱해야 합니다.
-                const newObject = { "Raw_Data": newValueString }; 
-                extractedData.push(newObject);
-                newDataInput.value = ''; // 입력 필드 초기화
-                renderExtractedData();
+                if (Object.keys(newObject).length > 0) {
+                    extractedData.push(newObject);
+                    newDataInput.value = ''; 
+                    renderExtractedData();
+                } else {
+                    alert('유효한 "키: 값" 쌍(예: 핸드폰번호: 010-..., 지갑주소: 0x...)을 입력해주세요.');
+                }
             }
         }
 
-        // 결과 엑셀 다운로드
+        // 결과 엑셀 다운로드 (이전 로직 유지)
         function downloadResult() {
             if (extractedData.length === 0) {
                 alert('다운로드할 데이터가 없습니다. 먼저 데이터를 추출하거나 추가해주세요.');
                 return;
             }
 
-            // 모든 항목을 문자열로 변환하여 하나의 시트 생성 (현재 renderExtractedData와 동일한 형식)
-            const exportData = extractedData.map((item, index) => {
-                 return {
-                    "번호": index + 1,
-                    "데이터": Object.entries(item)
-                                       .filter(([key, value]) => value !== undefined && value !== null && String(value).trim() !== '')
-                                       .map(([key, value]) => `${key}: ${value}`)
-                                       .join(', ')
-                 };
+            // 다운로드 시 각 키를 별도 컬럼으로 분리하여 저장
+            const exportData = extractedData.map(item => {
+                 // 원본 item 객체에 '번호' 컬럼 추가 후 반환
+                 return { "번호": item.index + 1, ...item };
             });
 
             const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "추출된_데이터");
-            XLSX.writeFile(wb, "추출_결과.xlsx");
+            XLSX.utils.book_append_sheet(wb, ws, "최종_데이터");
+            XLSX.writeFile(wb, "최종_추출_결과.xlsx");
         }
     </script>
 </body>
