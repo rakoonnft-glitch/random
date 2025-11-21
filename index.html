@@ -10,8 +10,16 @@
         .container { max-width: 1200px; margin: auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1, h2, h3 { color: #0056b3; border-bottom: 2px solid #e9ecef; padding-bottom: 5px; margin-top: 25px; }
         input[type="file"] { margin-bottom: 15px; display: block; }
+        
+        /* 버튼 스타일 */
         button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; margin-right: 10px; transition: background-color 0.3s; }
-        button:hover { background-color: #0056b3; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .lock-button { background-color: #ffc107; color: #333; } /* 잠금/해제 버튼 */
+        .lock-button:hover:not(:disabled) { background-color: #e0a800; }
+        .delete-button { background-color: #dc3545; }
+        .delete-button:hover:not(:disabled) { background-color: #c82333; }
+
         .result-area, .final-list-area { margin-top: 20px; padding: 0; border: 1px solid #ddd; background-color: #fff; border-radius: 6px; max-height: 400px; overflow-y: auto; }
         .final-list-area { border-color: #00bcd4; }
         
@@ -25,7 +33,8 @@
         .feedback { margin-top: 15px; padding: 12px; background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 6px; display: none; }
         .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .column-select-tip { font-size: 0.9em; color: #6c757d; margin-bottom: 10px; }
-        .action-buttons { margin-top: 15px; }
+        .action-buttons { margin-top: 15px; display: flex; align-items: center; justify-content: space-between;}
+        .action-buttons-final { margin-top: 15px; }
 
         /* 테이블 스타일 */
         table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -35,6 +44,7 @@
         .final-list-area tr:hover { background-color: #e6f7ff; }
 
         .data-input { width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 3px; box-sizing: border-box; }
+        .data-input:disabled { background-color: #e9ecef; }
         .col-actions button { margin-right: 0; padding: 5px 10px; font-size: 13px; }
         
         /* 수동 추가 입력 필드 */
@@ -60,7 +70,7 @@
 
         <div class="controls">
             <h2>2. 중복 제거 및 추출 설정</h2>
-            <div class="column-select-tip">💡 파일을 업로드하고 버튼을 누르면, 이 아래에 실제 컬럼명이 표시됩니다. (XLSX 파일 사용 시 인코딩 오류 방지)</div>
+            <div class="column-select-tip">💡 파일을 업로드하고 버튼을 누르면, 이 아래에 실제 컬럼명이 표시됩니다. **(중복 기준 변경 시, 아래 인원수가 실시간으로 업데이트됩니다)**</div>
             
             <div class="control-group">
                 <label>중복 제거 기준 컬럼 선택 (최대 2개):</label>
@@ -80,8 +90,10 @@
         <div class="controls">
             <h2>3. 현재 추출된 데이터 편집 (임시 당첨자)</h2>
             <div class="action-buttons">
-                <button onclick="confirmExtractedData()">✅ 확정 및 분리 (추첨 회차 기록)</button>
-                <button onclick="clearExtractedData()">❌ 취소 및 재추첨</button>
+                <div>
+                    <button onclick="confirmExtractedData()">✅ 확정 및 분리 (추첨 회차 기록)</button>
+                    <button onclick="clearExtractedData()">❌ 취소 및 재추첨</button>
+                </div>
             </div>
             <div class="result-area" id="extractedDataList">
                 <p>추출된 데이터가 여기에 표 형식으로 표시됩니다.</p>
@@ -90,14 +102,20 @@
         
         <div class="controls">
             <h2>4. 최종 확정된 당첨자 목록 (<span id="finalCount">0</span>명, 현재 회차: <span id="currentRoundDisplay">1</span>)</h2>
+            
+            <div class="action-buttons-final">
+                <button id="lockToggleButton" onclick="toggleFinalListLock()" class="lock-button">🔒 잠금/수정 해제 🔓</button>
+                <button id="bulkDeleteButton" onclick="bulkDeleteFinalWinners()" class="delete-button" disabled>선택 항목 복수 삭제</button>
+                <button onclick="downloadResult()">최종 목록 엑셀 다운로드</button>
+            </div>
+
             <div class="final-list-area" id="finalDataList">
                 <p>확정된 당첨자는 여기에 표 형식으로 표시됩니다.</p>
             </div>
             <div class="add-data-input">
-                <input type="text" id="finalDataInput" placeholder="최종 목록에 수동 추가 (예: 컬럼A: 값1, 컬럼B: 값2)">
-                <button onclick="addFinalData()">수동 추가</button>
+                <input type="text" id="finalDataInput" placeholder="최종 목록에 수동 추가 (예: 컬럼A: 값1, 컬럼B: 값2)" disabled>
+                <button id="addFinalDataButton" onclick="addFinalData()" disabled>수동 추가</button>
             </div>
-            <button onclick="downloadResult()">최종 목록 엑셀 다운로드</button>
         </div>
     </div>
 
@@ -108,26 +126,55 @@
         let finalWinners = [];      // 최종 확정된 당첨자 데이터
         let availableHeaders = [];  // 엑셀 파일에서 읽어온 실제 컬럼 이름 저장
         let currentRound = 1;       // 현재 추첨 회차 카운터
+        let isFinalListLocked = true; // 최종 목록 잠금 상태 (기본값: 잠금)
 
-        // 초기 남은 데이터 수 업데이트
+        // 초기 로드 및 UI 설정
         document.addEventListener('DOMContentLoaded', () => {
             updateRemainingCount();
             document.getElementById('currentRoundDisplay').textContent = currentRound;
+            // 초기 상태로 버튼 비활성화 및 입력창 잠금 설정
+            document.getElementById('lockToggleButton').textContent = '🔒 잠금/수정 해제 🔓';
+            document.getElementById('bulkDeleteButton').disabled = true;
+            document.getElementById('finalDataInput').disabled = true;
+            document.getElementById('addFinalDataButton').disabled = true;
         });
 
         // 체크박스 선택 제한 로직 (최대 2개)
         function setupCheckboxLimit() {
             const checkboxes = document.querySelectorAll('input[name="duplicateKey"]');
+            
             checkboxes.forEach(checkbox => {
+                // 1. 선택 제한 이벤트 리스너
                 checkbox.addEventListener('change', function() {
                     const checkedCount = document.querySelectorAll('input[name="duplicateKey"]:checked').length;
                     if (checkedCount > 2) {
                         this.checked = false; 
                         alert('중복 제거 기준 컬럼은 최대 2개까지만 선택할 수 있습니다.');
+                        return; // 초과 시 바로 종료
                     }
+                    // 2. 실시간 중복 제거 업데이트 리스너 (체크박스 변경 시마다 실행)
+                    updateDuplicateStatus();
                 });
             });
         }
+        
+        // 실시간 중복 제거 상태 업데이트 함수
+        function updateDuplicateStatus() {
+            if (initialData.length === 0) return;
+
+            // 중복 제거 및 추첨 가능 데이터 목록 갱신
+            availableData = removeDuplicates(initialData, finalWinners); 
+            
+            const duplicatedCount = initialData.length - availableData.length;
+            const fileStatus = document.getElementById('fileStatus');
+
+            fileStatus.textContent = `파일이 로드되었고, 현재 선택된 기준으로 **${duplicatedCount}개**의 중복이 제거되어 ${availableData.length}개 고유 데이터가 추첨 가능합니다.`;
+            fileStatus.style.display = 'block';
+            fileStatus.classList.remove('error');
+
+            updateRemainingCount();
+        }
+
 
         // 남은 데이터 수 업데이트
         function updateRemainingCount() {
@@ -190,31 +237,15 @@
                             label.innerHTML = `<input type="checkbox" name="duplicateKey" value="${header}"> ${header}`;
                             checkboxContainer.appendChild(label);
                         });
-                        setupCheckboxLimit();
+                        setupCheckboxLimit(); // 체크박스 이벤트 리스너 설정
 
-                        // 데이터 파싱 및 저장
                         const rawData = parseJsonToObjects(json, availableHeaders);
-                        
-                        // --- 중복 제거 피드백 로직 시작 ---
-                        const selectedKeys = Array.from(document.querySelectorAll('input[name="duplicateKey"]:checked')).map(cb => cb.value);
-                        
-                        // 중복 키가 선택되지 않았더라도, 모든 데이터를 초기 데이터로 설정
                         initialData = rawData; 
-
-                        // 선택된 키를 기반으로 초기 중복 제거 수행 (finalWinners가 없으므로 빈 배열 전달)
-                        availableData = removeDuplicates(initialData, []); 
-                        
-                        const duplicatedCount = initialData.length - availableData.length;
-                        
-                        // --- 중복 제거 피드백 로직 끝 ---
-                        
                         finalWinners = []; // 새 파일 로드 시 최종 목록 초기화
                         currentRound = 1; // 새 파일 로드 시 회차 초기화
+                        
+                        updateDuplicateStatus(); // 초기 중복 제거 상태 업데이트
 
-                        fileStatus.textContent = `파일 "${file.name}"이 성공적으로 로드되었습니다. 총 ${availableHeaders.length}개 컬럼, ${initialData.length}개 행이 확인되었으며, **${duplicatedCount}개**의 중복이 제거되어 ${availableData.length}개 고유 데이터가 추첨 가능합니다.`;
-                        fileStatus.style.display = 'block';
-                        fileStatus.classList.remove('error');
-                        updateRemainingCount();
                         renderFinalData(); 
 
                     } else {
@@ -316,7 +347,7 @@
                 return;
             }
 
-            // 현재 남은 데이터 목록을 중복 제거 및 확정 목록 제외하여 갱신
+            // 최신 중복 제거 및 확정 목록 제외하여 갱신
             availableData = removeDuplicates(initialData, finalWinners); 
             
             if (availableData.length === 0) {
@@ -380,6 +411,9 @@
 
             // 헤더 행 생성
             const headerRow = thead.insertRow();
+            if (!isExtractedList) {
+                 headerRow.insertCell().textContent = '선택'; // 복수 삭제용 체크박스
+            }
             headerRow.insertCell().textContent = 'No.';
             displayHeaders.forEach(header => {
                 headerRow.insertCell().textContent = header;
@@ -389,6 +423,18 @@
             // 데이터 행 생성
             dataArray.forEach((item, index) => {
                 const dataRow = tbody.insertRow();
+                
+                // 최종 목록일 때만 체크박스 추가
+                if (!isExtractedList) {
+                    const checkboxCell = dataRow.insertCell();
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.name = 'finalWinnerSelection';
+                    checkbox.value = index; // 인덱스를 값으로 사용
+                    checkbox.disabled = isFinalListLocked; // 잠금 상태에 따라 비활성화
+                    checkboxCell.appendChild(checkbox);
+                }
+
                 dataRow.insertCell().textContent = index + 1; // No.
 
                 displayHeaders.forEach(header => {
@@ -398,11 +444,19 @@
                     input.type = 'text';
                     input.classList.add('data-input');
                     
-                    if (header === 'Winning Round' || header === 'Entry Method') {
-                        input.value = item[header] || '';
-                        input.readOnly = true; 
-                        input.style.backgroundColor = '#f0f0f0';
-                    } else {
+                    if (!isExtractedList) { // 최종 목록 (Final List)
+                        input.disabled = isFinalListLocked; // 잠금 상태에 따라 비활성화
+                        if (header === 'Winning Round' || header === 'Entry Method') {
+                            input.value = item[header] || '';
+                            input.readOnly = true; 
+                            input.style.backgroundColor = '#f0f0f0';
+                        } else {
+                            input.value = item[header] || '';
+                            input.onchange = (e) => {
+                                item[header] = e.target.value.trim();
+                            };
+                        }
+                    } else { // 임시 추출 목록 (Extracted List)
                         input.value = item[header] || '';
                         input.onchange = (e) => {
                             item[header] = e.target.value.trim();
@@ -418,17 +472,22 @@
                 const deleteButton = document.createElement('button');
                 deleteButton.textContent = '삭제';
                 
+                if (!isExtractedList) {
+                    deleteButton.disabled = isFinalListLocked; // 최종 목록일 경우 잠금 상태에 따라 비활성화
+                    deleteButton.classList.add('delete-button');
+                }
+                
                 deleteButton.onclick = () => {
                     if (isExtractedList) {
                         deleteData(extractedData, index, renderExtractedData);
-                    } else {
+                    } else if (!isFinalListLocked) {
                         const deletedItem = deleteData(finalWinners, index, renderFinalData);
                         if (deletedItem && deletedItem['Entry Method'] === 'Random Draw') {
                             initialData.push(deletedItem); 
-                            availableData = removeDuplicates(initialData, finalWinners); 
-                            updateRemainingCount();
+                            updateDuplicateStatus(); // 중복 상태 업데이트
                             alert('확정 목록에서 삭제되었습니다. 해당 데이터는 이제 재추첨 가능합니다.');
                         } else if (deletedItem && deletedItem['Entry Method'] === 'Manual Add') {
+                            updateDuplicateStatus(); // 중복 상태 업데이트
                             alert('수동 추가된 항목이 최종 목록에서 삭제되었습니다.');
                         }
                     }
@@ -452,15 +511,20 @@
                 alert('확정할 추출된 데이터가 없습니다.');
                 return;
             }
+            if (!isFinalListLocked) {
+                alert('경고: 최종 목록이 수정 해제 상태입니다. 데이터를 보호하기 위해 먼저 목록을 잠근 후 확정해주세요.');
+                return;
+            }
 
             const currentRoundNumber = currentRound;
             
             // 1. 최종 목록에 추가 (회차 정보와 방법을 추가)
             const winnersToConfirm = extractedData.map(item => {
-                return { ...item, 
-                         'Winning Round': currentRoundNumber, 
-                         'Entry Method': 'Random Draw' 
-                       };
+                // 기존 item을 복사하여 새로운 필드를 추가
+                const newItem = { ...item };
+                newItem['Winning Round'] = currentRoundNumber;
+                newItem['Entry Method'] = 'Random Draw';
+                return newItem;
             });
             finalWinners.push(...winnersToConfirm);
 
@@ -482,12 +546,11 @@
             // 3. 추출된 목록 비우기 및 다음 회차로 증가
             extractedData = [];
             currentRound++; // 회차 증가
-            availableData = removeDuplicates(initialData, finalWinners); 
+            updateDuplicateStatus(); // 중복 상태 및 추첨 가능 데이터 갱신
 
             // 4. UI 갱신
             renderExtractedData();
             renderFinalData();
-            updateRemainingCount();
             alert(`총 ${finalWinners.length}명의 당첨자가 최종 확정되었습니다. 다음 추첨은 ${currentRound}회차로 진행됩니다.`);
         }
         
@@ -500,8 +563,40 @@
             alert('현재 추출된 목록이 취소되었습니다. 다시 추출 버튼을 눌러주세요.');
         }
 
+        // --- 최종 목록 관리 기능 ---
+
+        // 최종 목록 잠금/해제 토글
+        function toggleFinalListLock() {
+            isFinalListLocked = !isFinalListLocked;
+            const lockButton = document.getElementById('lockToggleButton');
+            const bulkDeleteButton = document.getElementById('bulkDeleteButton');
+            const finalDataInput = document.getElementById('finalDataInput');
+            const addFinalDataButton = document.getElementById('addFinalDataButton');
+
+            if (isFinalListLocked) {
+                lockButton.textContent = '🔒 잠금/수정 해제 🔓';
+                lockButton.style.backgroundColor = '#ffc107';
+                bulkDeleteButton.disabled = true;
+                finalDataInput.disabled = true;
+                addFinalDataButton.disabled = true;
+                alert('최종 목록이 잠금 상태로 설정되어 데이터 보호 중입니다.');
+            } else {
+                lockButton.textContent = '🔓 수정 해제/잠금 🔒';
+                lockButton.style.backgroundColor = '#28a745';
+                bulkDeleteButton.disabled = false;
+                finalDataInput.disabled = false;
+                addFinalDataButton.disabled = false;
+                alert('최종 목록이 수정 해제되었습니다. 이제 수정, 삭제, 수동 추가가 가능합니다.');
+            }
+
+            // UI 전체를 다시 렌더링하여 Disabled 상태를 반영
+            renderFinalData(); 
+        }
+
         // 최종 확정 목록에 수동 추가
         function addFinalData() {
+            if (isFinalListLocked) return; // 잠금 상태에서는 실행 불가
+
             const newDataInput = document.getElementById('finalDataInput');
             const newValueString = newDataInput.value.trim();
 
@@ -526,7 +621,7 @@
                     newObject['Entry Method'] = 'Manual Add';
 
                     finalWinners.push(newObject);
-                    availableData = removeDuplicates(initialData, finalWinners); 
+                    updateDuplicateStatus(); 
 
                     newDataInput.value = ''; 
                     renderFinalData();
@@ -535,6 +630,40 @@
                     alert('유효한 "컬럼: 값" 쌍(예: 텔레그램 ID: @user, 핸드폰 번호: 010-...)을 입력해주세요.');
                 }
             }
+        }
+        
+        // 선택된 항목 복수 삭제
+        function bulkDeleteFinalWinners() {
+            if (isFinalListLocked) return; // 잠금 상태에서는 실행 불가
+            
+            const checkboxes = document.querySelectorAll('input[name="finalWinnerSelection"]:checked');
+            if (checkboxes.length === 0) {
+                alert('삭제할 항목을 1개 이상 선택해주세요.');
+                return;
+            }
+
+            if (!confirm(`선택된 ${checkboxes.length}개의 항목을 정말로 삭제하시겠습니까?`)) {
+                return;
+            }
+            
+            // 선택된 인덱스를 내림차순으로 정렬하여 삭제 (인덱스가 밀리는 것을 방지)
+            const indicesToDelete = Array.from(checkboxes).map(cb => parseInt(cb.value)).sort((a, b) => b - a);
+
+            let restoredCount = 0;
+            indicesToDelete.forEach(index => {
+                const deletedItem = finalWinners.splice(index, 1)[0];
+                
+                // 추첨으로 당첨된 항목만 원본 데이터에 복구
+                if (deletedItem && deletedItem['Entry Method'] === 'Random Draw') {
+                    initialData.push(deletedItem);
+                    restoredCount++;
+                }
+            });
+
+            updateDuplicateStatus(); // 중복 상태 및 추첨 가능 데이터 갱신
+            renderFinalData(); // UI 갱신
+
+            alert(`${indicesToDelete.length}개 항목이 삭제되었고, 그 중 ${restoredCount}개가 재추첨 가능 데이터로 복구되었습니다.`);
         }
 
         // 결과 엑셀 다운로드 (최종 확정 목록만)
