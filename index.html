@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #007bff; /* 기업 메인 컬러 예시 (블루) */
+            --primary-color: #007bff; /* 메인 컬러 */
             --primary-dark-color: #0056b3;
             --text-color: #212529;
             --sub-text-color: #495057;
@@ -64,12 +64,6 @@
             margin-bottom: 15px;
             padding-bottom: 8px;
             border-bottom: 1px solid var(--border-color);
-        }
-
-        p {
-            font-size: 1em;
-            color: var(--sub-text-color);
-            margin-bottom: 15px;
         }
 
         .control-group {
@@ -367,7 +361,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>취합 사이트트</h1>
+        <h1>기업용 당첨자 관리 도구</h1>
         <p>엑셀 파일을 업로드하여 중복을 제거하고, 지정된 조건에 따라 랜덤으로 당첨자를 추출합니다. 확정된 당첨자는 다음 추첨에서 자동으로 제외되며, 모든 추첨 내역이 기록됩니다.</p>
 
         <div class="control-group">
@@ -458,7 +452,7 @@
                     if (checkedCount > 2) {
                         this.checked = false; 
                         alert('중복 제거 기준 컬럼은 최대 2개까지만 선택할 수 있습니다.');
-                        return; // 초과 시 바로 종료
+                        return;
                     }
                     // 2. 실시간 중복 제거 업데이트 리스너 (체크박스 변경 시마다 실행)
                     updateDuplicateStatus();
@@ -563,7 +557,7 @@
                     }
                 } catch (error) {
                     console.error(`Error reading file:`, error);
-                    fileStatus.textContent = `파일 처리 중 오류 발생: ${error.message}. 파일 형식을 확인해주세요. (CSV 파일의 경우, UTF-8로 저장 후 다시 시도해보세요.)`;
+                    fileStatus.textContent = `파일 처리 중 오류 발생: ${error.message}. (CSV 파일의 경우, UTF-8로 저장 후 다시 시도해보세요.)`;
                     fileStatus.classList.add('error');
                     fileStatus.style.display = 'block';
                 }
@@ -751,3 +745,255 @@
                     checkbox.type = 'checkbox';
                     checkbox.name = 'finalWinnerSelection';
                     checkbox.value = index; // 인덱스를 값으로 사용
+                    checkbox.disabled = isFinalListLocked; // 잠금 상태에 따라 비활성화
+                    checkboxCell.appendChild(checkbox);
+                }
+
+                dataRow.insertCell().textContent = index + 1; // No.
+
+                displayHeaders.forEach(header => {
+                    const cell = dataRow.insertCell();
+                    
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.classList.add('data-input');
+                    
+                    if (!isExtractedList) { // 최종 목록 (Final List)
+                        input.disabled = isFinalListLocked; // 잠금 상태에 따라 비활성화
+                        if (header === 'Winning Round' || header === 'Entry Method') {
+                            input.value = item[header] || '';
+                            input.readOnly = true; 
+                            input.style.backgroundColor = '#f0f0f0';
+                        } else {
+                            input.value = item[header] || '';
+                            input.onchange = (e) => {
+                                item[header] = e.target.value.trim();
+                            };
+                        }
+                    } else { // 임시 추출 목록 (Extracted List)
+                        input.value = item[header] || '';
+                        input.onchange = (e) => {
+                            item[header] = e.target.value.trim();
+                        };
+                    }
+                    
+                    cell.appendChild(input);
+                });
+
+                // 관리 버튼 셀
+                const actionsCell = dataRow.insertCell();
+                actionsCell.classList.add('col-actions');
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = '삭제';
+                
+                if (!isExtractedList) {
+                    deleteButton.disabled = isFinalListLocked; // 최종 목록일 경우 잠금 상태에 따라 비활성화
+                    deleteButton.classList.add('delete-button');
+                }
+                
+                deleteButton.onclick = () => {
+                    if (isExtractedList) {
+                        deleteData(extractedData, index, renderExtractedData);
+                    } else if (!isFinalListLocked) {
+                        const deletedItem = deleteData(finalWinners, index, renderFinalData);
+                        if (deletedItem && deletedItem['Entry Method'] === 'Random Draw') {
+                            initialData.push(deletedItem); 
+                            updateDuplicateStatus(); // 중복 상태 업데이트
+                            alert('확정 목록에서 삭제되었습니다. 해당 데이터는 이제 재추첨 가능합니다.');
+                        } else if (deletedItem && deletedItem['Entry Method'] === 'Manual Add') {
+                            updateDuplicateStatus(); // 중복 상태 업데이트
+                            alert('수동 추가된 항목이 최종 목록에서 삭제되었습니다.');
+                        }
+                    }
+                };
+                actionsCell.appendChild(deleteButton);
+            });
+
+            return table;
+        }
+
+        // 데이터 삭제 로직 (재활용)
+        function deleteData(dataArray, index, renderCallback) {
+            const deletedItem = dataArray.splice(index, 1)[0];
+            renderCallback();
+            return deletedItem;
+        }
+
+        // 현재 추출된 데이터를 최종 목록으로 확정하고 원본에서 제거
+        function confirmExtractedData() {
+            if (extractedData.length === 0) {
+                alert('확정할 추출된 데이터가 없습니다.');
+                return;
+            }
+            if (!isFinalListLocked) {
+                alert('경고: 최종 목록이 수정 해제 상태입니다. 데이터를 보호하기 위해 먼저 [🔒 목록 잠금] 버튼을 눌러 잠근 후 확정해주세요.');
+                return;
+            }
+
+            const currentRoundNumber = currentRound;
+            
+            // 1. 최종 목록에 추가 (회차 정보와 방법을 추가)
+            const winnersToConfirm = extractedData.map(item => {
+                const newItem = { ...item };
+                newItem['Winning Round'] = currentRoundNumber;
+                newItem['Entry Method'] = 'Random Draw';
+                return newItem;
+            });
+            finalWinners.push(...winnersToConfirm);
+
+            // 2. 원본 데이터 (initialData)에서 추출된 데이터를 제거합니다.
+            const selectedKeys = Array.from(document.querySelectorAll('input[name="duplicateKey"]:checked')).map(cb => cb.value);
+            if (selectedKeys.length > 0) {
+                const extractedKeys = new Set(extractedData.map(row => 
+                    selectedKeys.map(k => String(row[k] || '').trim().toLowerCase()).join('|||')
+                ));
+
+                initialData = initialData.filter(row => {
+                    const key = selectedKeys.map(k => String(row[k] || '').trim().toLowerCase()).join('|||');
+                    return !extractedKeys.has(key);
+                });
+            } else {
+                alert('경고: 중복 제거 기준이 선택되지 않아, 원본 데이터에서 정확한 항목 제거가 어렵습니다. 최종 목록에만 추가하고, 원본 데이터는 그대로 유지됩니다.');
+            }
+
+            // 3. 추출된 목록 비우기 및 다음 회차로 증가
+            extractedData = [];
+            currentRound++; // 회차 증가
+            updateDuplicateStatus(); // 중복 상태 및 추첨 가능 데이터 갱신
+
+            // 4. UI 갱신
+            renderExtractedData();
+            renderFinalData();
+            alert(`총 ${finalWinners.length}명의 당첨자가 최종 확정되었습니다. 다음 추첨은 ${currentRound}회차로 진행됩니다.`);
+        }
+        
+        // 현재 추출된 데이터를 취소하고 재추첨 가능한 데이터로 되돌림
+        function clearExtractedData() {
+            if (extractedData.length === 0) return;
+            
+            extractedData = [];
+            renderExtractedData();
+            alert('현재 추출된 목록이 취소되었습니다. 다시 추출 버튼을 눌러주세요.');
+        }
+
+        // --- 최종 목록 관리 기능 ---
+
+        // 최종 목록 잠금/해제 토글
+        function toggleFinalListLock() {
+            isFinalListLocked = !isFinalListLocked;
+            const lockButton = document.getElementById('lockToggleButton');
+            const bulkDeleteButton = document.getElementById('bulkDeleteButton');
+            const finalDataInput = document.getElementById('finalDataInput');
+            const addFinalDataButton = document.getElementById('addFinalDataButton');
+
+            if (isFinalListLocked) {
+                lockButton.textContent = '🔒 목록 잠금';
+                lockButton.classList.remove('unlocked');
+                bulkDeleteButton.disabled = true;
+                finalDataInput.disabled = true;
+                addFinalDataButton.disabled = true;
+                alert('최종 목록이 잠금 상태로 설정되어 데이터 보호 중입니다.');
+            } else {
+                lockButton.textContent = '🔓 수정 해제';
+                lockButton.classList.add('unlocked');
+                bulkDeleteButton.disabled = false;
+                finalDataInput.disabled = false;
+                addFinalDataButton.disabled = false;
+                alert('최종 목록이 수정 해제되었습니다. 이제 수정, 삭제, 수동 추가가 가능합니다.');
+            }
+
+            // UI 전체를 다시 렌더링하여 Disabled 상태를 반영
+            renderFinalData(); 
+        }
+
+        // 최종 확정 목록에 수동 추가
+        function addFinalData() {
+            if (isFinalListLocked) return; // 잠금 상태에서는 실행 불가
+
+            const newDataInput = document.getElementById('finalDataInput');
+            const newValueString = newDataInput.value.trim();
+
+            if (newValueString) {
+                const parts = newValueString.split(',').map(part => part.trim()).filter(part => part.includes(':'));
+                let newObject = {};
+                let isValid = true;
+
+                parts.forEach(part => {
+                    const match = part.match(/(.+?)\s*:\s*(.*)/); 
+                    if (match && match[1] && match[2]) {
+                        const key = match[1].trim();
+                        const value = match[2].trim();
+                        newObject[key] = value;
+                    } else {
+                        isValid = false;
+                    }
+                });
+                
+                if (Object.keys(newObject).length > 0 && isValid) {
+                    newObject['Winning Round'] = 'Manual';
+                    newObject['Entry Method'] = 'Manual Add';
+
+                    finalWinners.push(newObject);
+                    updateDuplicateStatus(); 
+
+                    newDataInput.value = ''; 
+                    renderFinalData();
+                    alert('데이터가 최종 목록에 수동으로 추가되었습니다.');
+                } else {
+                    alert('유효한 "컬럼: 값" 쌍(예: 텔레그램 ID: @user, 핸드폰 번호: 010-...)을 입력해주세요.');
+                }
+            }
+        }
+        
+        // 선택된 항목 복수 삭제
+        function bulkDeleteFinalWinners() {
+            if (isFinalListLocked) return; // 잠금 상태에서는 실행 불가
+            
+            const checkboxes = document.querySelectorAll('input[name="finalWinnerSelection"]:checked');
+            if (checkboxes.length === 0) {
+                alert('삭제할 항목을 1개 이상 선택해주세요.');
+                return;
+            }
+
+            if (!confirm(`선택된 ${checkboxes.length}개의 항목을 정말로 삭제하시겠습니까?`)) {
+                return;
+            }
+            
+            // 선택된 인덱스를 내림차순으로 정렬하여 삭제 (인덱스가 밀리는 것을 방지)
+            const indicesToDelete = Array.from(checkboxes).map(cb => parseInt(cb.value)).sort((a, b) => b - a);
+
+            let restoredCount = 0;
+            indicesToDelete.forEach(index => {
+                const deletedItem = finalWinners.splice(index, 1)[0];
+                
+                if (deletedItem && deletedItem['Entry Method'] === 'Random Draw') {
+                    initialData.push(deletedItem);
+                    restoredCount++;
+                }
+            });
+
+            updateDuplicateStatus(); // 중복 상태 및 추첨 가능 데이터 갱신
+            renderFinalData(); // UI 갱신
+
+            alert(`${indicesToDelete.length}개 항목이 삭제되었고, 그 중 ${restoredCount}개가 재추첨 가능 데이터로 복구되었습니다.`);
+        }
+
+        // 결과 엑셀 다운로드 (최종 확정 목록만)
+        function downloadResult() {
+            if (finalWinners.length === 0) {
+                alert('다운로드할 최종 확정 데이터가 없습니다.');
+                return;
+            }
+
+            const exportData = finalWinners.map((item, index) => {
+                 return { "No.": index + 1, ...item };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "최종_당첨자_목록");
+            XLSX.writeFile(wb, "최종_당첨자_목록.xlsx");
+        }
+    </script>
+</body>
+</html>
