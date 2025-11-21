@@ -3,118 +3,424 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>단일 엑셀 파일 중복 제거 및 당첨자 분리 추출 도구</title>
+    <title>당첨자 관리 도구</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Malgun Gothic', '맑은 고딕', Arial, sans-serif; line-height: 1.6; padding: 20px; background-color: #f8f9fa; color: #333; }
-        .container { max-width: 1200px; margin: auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        h1, h2, h3 { color: #0056b3; border-bottom: 2px solid #e9ecef; padding-bottom: 5px; margin-top: 25px; }
-        input[type="file"] { margin-bottom: 15px; display: block; }
-        
-        /* 버튼 스타일 */
-        button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; margin-right: 10px; transition: background-color 0.3s; }
-        button:hover:not(:disabled) { background-color: #0056b3; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        .lock-button { background-color: #ffc107; color: #333; } /* 잠금/해제 버튼 */
-        .lock-button:hover:not(:disabled) { background-color: #e0a800; }
-        .delete-button { background-color: #dc3545; }
-        .delete-button:hover:not(:disabled) { background-color: #c82333; }
+        :root {
+            --primary-color: #007bff; /* 기업 메인 컬러 예시 (블루) */
+            --primary-dark-color: #0056b3;
+            --text-color: #212529;
+            --sub-text-color: #495057;
+            --background-color: #f8f9fa;
+            --card-background: #ffffff;
+            --border-color: #e9ecef;
+            --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.05);
+            --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.1);
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+        }
 
-        .result-area, .final-list-area { margin-top: 20px; padding: 0; border: 1px solid #ddd; background-color: #fff; border-radius: 6px; max-height: 400px; overflow-y: auto; }
-        .final-list-area { border-color: #00bcd4; }
-        
-        .control-group { margin-bottom: 20px; padding: 10px 0; }
-        .control-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #333; }
-        .control-group input[type="number"] { padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: 120px; margin-right: 15px; font-size: 16px; }
-        
-        .checkbox-group { display: flex; flex-wrap: wrap; gap: 15px; padding: 15px; border: 1px solid #e9ecef; border-radius: 6px; background-color: #f9f9f9; }
-        .checkbox-group label { font-weight: normal; }
-        
-        .feedback { margin-top: 15px; padding: 12px; background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 6px; display: none; }
-        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .column-select-tip { font-size: 0.9em; color: #6c757d; margin-bottom: 10px; }
-        .action-buttons { margin-top: 15px; display: flex; align-items: center; justify-content: space-between;}
-        .action-buttons-final { margin-top: 15px; }
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            line-height: 1.6;
+            padding: 30px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            margin: auto;
+            background: var(--card-background);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-medium);
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            color: var(--primary-dark-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 1.6em;
+            font-weight: 500;
+            color: var(--sub-text-color);
+            margin-top: 35px;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        p {
+            font-size: 1em;
+            color: var(--sub-text-color);
+            margin-bottom: 15px;
+        }
+
+        .control-group {
+            margin-bottom: 25px;
+            padding: 15px 0;
+            border-top: 1px solid var(--border-color);
+            padding-top: 25px;
+        }
+        .control-group:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 500;
+            color: var(--text-color);
+            font-size: 1.05em;
+        }
+
+        input[type="file"] {
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+            background-color: #fff;
+            color: var(--text-color);
+            width: fit-content;
+        }
+
+        input[type="number"] {
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            width: 100px;
+            margin-right: 15px;
+            font-size: 16px;
+            color: var(--text-color);
+            background-color: var(--card-background);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        /* 버튼 스타일 */
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            margin-right: 10px;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: var(--shadow-light);
+        }
+        button:hover:not(:disabled) {
+            background-color: var(--primary-dark-color);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .lock-button {
+            background-color: var(--warning-color);
+            color: var(--text-color);
+        }
+        .lock-button:hover:not(:disabled) {
+            background-color: #e0a800;
+        }
+        .lock-button.unlocked { /* 잠금 해제 상태 */
+            background-color: var(--success-color);
+            color: white;
+        }
+        .lock-button.unlocked:hover:not(:disabled) {
+            background-color: #218838;
+        }
+
+        .delete-button {
+            background-color: var(--danger-color);
+        }
+        .delete-button:hover:not(:disabled) {
+            background-color: #c82333;
+        }
+
+        /* 피드백 메시지 */
+        .feedback {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #d4edda; /* Light green for success */
+            color: #155724; /* Dark green */
+            border: 1px solid #c3e6cb;
+            border-radius: 8px;
+            font-size: 0.95em;
+            display: none;
+            box-shadow: var(--shadow-light);
+        }
+        .feedback.error {
+            background-color: #f8d7da; /* Light red for error */
+            color: #721c24; /* Dark red */
+            border-color: #f5c6cb;
+        }
+
+        .column-select-tip {
+            font-size: 0.85em;
+            color: var(--sub-text-color);
+            margin-top: -10px;
+            margin-bottom: 20px;
+            padding-left: 5px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--background-color);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
+            margin-bottom: 20px;
+        }
+        .checkbox-group label {
+            font-weight: 400;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+        .checkbox-group input[type="checkbox"] {
+            margin-right: 8px;
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary-color);
+        }
+
+        .status-bar {
+            margin-top: 25px;
+            padding: 15px;
+            font-size: 1.1em;
+            font-weight: 500;
+            background-color: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow-light);
+        }
+        .status-bar strong {
+            color: var(--primary-color);
+        }
+        .final-list-area .status-bar strong {
+            color: var(--success-color);
+        }
+
+        .result-area, .final-list-area {
+            margin-top: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--card-background);
+            max-height: 450px;
+            overflow-y: auto;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        .final-list-area {
+            border-color: #00bcd4; /* Accent color for final list */
+        }
+        .result-area p, .final-list-area p {
+            padding: 20px;
+            color: var(--sub-text-color);
+            text-align: center;
+        }
 
         /* 테이블 스타일 */
-        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; word-wrap: break-word; }
-        th { background-color: #e9ecef; font-weight: bold; color: #495057; border-top: 1px solid #dee2e6; }
-        tr:hover { background-color: #f1f1f1; }
-        .final-list-area tr:hover { background-color: #e6f7ff; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto; /* Allow columns to size naturally */
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            word-wrap: break-word;
+            font-size: 0.95em;
+        }
+        th {
+            background-color: var(--background-color);
+            font-weight: 600;
+            color: var(--sub-text-color);
+            border-top: 1px solid var(--border-color);
+            position: sticky; /* Make header sticky */
+            top: 0;
+            z-index: 10;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .final-list-area tr:hover {
+            background-color: #eaf6ff;
+        }
 
-        .data-input { width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 3px; box-sizing: border-box; }
-        .data-input:disabled { background-color: #e9ecef; }
-        .col-actions button { margin-right: 0; padding: 5px 10px; font-size: 13px; }
-        
+        .data-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #dcdcdc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            background-color: #fff;
+            color: var(--text-color);
+        }
+        .data-input:disabled {
+            background-color: #eceff1;
+            cursor: not-allowed;
+            border-color: #e0e0e0;
+        }
+        .col-actions {
+            white-space: nowrap; /* Prevent buttons from wrapping */
+            text-align: center;
+        }
+        .col-actions button {
+            margin: 0 5px;
+            padding: 8px 12px;
+            font-size: 0.85em;
+            box-shadow: none;
+        }
+
+        .action-buttons {
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-start; /* 좌측 정렬 */
+            gap: 10px; /* 버튼 사이 간격 */
+        }
+        .action-buttons-final {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap; /* 반응형을 위해 줄바꿈 허용 */
+            gap: 10px;
+            align-items: center;
+            justify-content: flex-start; /* 좌측 정렬 */
+        }
+        .action-buttons-final button {
+            margin-right: 0; /* 기본 버튼 마진 제거 */
+        }
+
         /* 수동 추가 입력 필드 */
-        .add-data-input { display: flex; margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 6px; border: 1px dashed #ced4da; }
-        .add-data-input input { flex-grow: 1; margin-right: 10px; padding: 10px; border: 1px solid #ced4da; border-radius: 4px; }
-        
-        .status-bar { padding: 10px 0; font-size: 1.1em; font-weight: bold; }
-        .status-bar strong { color: #dc3545; }
-        .final-list-area .status-bar strong { color: #00bcd4; }
+        .add-data-input {
+            display: flex;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: var(--background-color);
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
+            gap: 10px;
+        }
+        .add-data-input input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #dcdcdc;
+            border-radius: 6px;
+            font-size: 1em;
+            color: var(--text-color);
+            background-color: var(--card-background);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        .add-data-input input:disabled {
+            background-color: #eceff1;
+            cursor: not-allowed;
+        }
+        .add-data-input button {
+            padding: 12px 20px;
+            flex-shrink: 0; /* 버튼이 줄어들지 않도록 */
+        }
+
+        /* 체크박스 디자인 조정 */
+        input[type="checkbox"] {
+            margin-right: 8px;
+            width: 1.1em;
+            height: 1.1em;
+            vertical-align: middle;
+            position: relative;
+            top: -1px;
+            accent-color: var(--primary-color);
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>단일 엑셀 파일 중복 제거 및 당첨자 분리 추출 도구</h1>
-        <p>엑셀 파일을 업로드하고, 특정 컬럼 기준으로 중복을 제거한 뒤 랜덤으로 데이터를 추출합니다. 확정된 당첨자는 원본 데이터에서 제외되어 다음 추첨에 사용되지 않습니다.</p>
+        <h1>기업용 당첨자 관리 도구</h1>
+        <p>엑셀 파일을 업로드하여 중복을 제거하고, 지정된 조건에 따라 랜덤으로 당첨자를 추출합니다. 확정된 당첨자는 다음 추첨에서 자동으로 제외되며, 모든 추첨 내역이 기록됩니다.</p>
 
         <div class="control-group">
-            <label for="fileInput">1. 엑셀 파일 선택 (1개만 선택 가능)</label>
+            <label for="fileInput">1. 엑셀 파일 선택 (단일 파일만 지원)</label>
             <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
             <button onclick="loadFileAndShowColumns()">파일 업로드 및 컬럼 확인</button>
             <div id="fileStatus" class="feedback"></div>
         </div>
 
-        <div class="controls">
+        <div class="control-group">
             <h2>2. 중복 제거 및 추출 설정</h2>
-            <div class="column-select-tip">💡 파일을 업로드하고 버튼을 누르면, 이 아래에 실제 컬럼명이 표시됩니다. **(중복 기준 변경 시, 아래 인원수가 실시간으로 업데이트됩니다)**</div>
+            <div class="column-select-tip">💡 파일을 업로드하고 컬럼 선택을 완료해주세요. 중복 기준 변경 시, 아래 추첨 가능 인원수가 실시간으로 업데이트됩니다.</div>
             
-            <div class="control-group">
-                <label>중복 제거 기준 컬럼 선택 (최대 2개):</label>
-                <div class="checkbox-group" id="duplicateKeyCheckboxes">
-                    <p>파일을 먼저 업로드해주세요.</p>
-                </div>
+            <label>중복 제거 기준 컬럼 선택 (최대 2개):</label>
+            <div class="checkbox-group" id="duplicateKeyCheckboxes">
+                <p>파일을 먼저 업로드해주세요.</p>
             </div>
             
-            <div class="control-group">
-                <label for="extractCount">추출할 데이터 개수:</label>
-                <input type="number" id="extractCount" value="50" min="1">
-                <button onclick="processAndExtract()">랜덤 추출</button>
+            <label for="extractCount">추출할 당첨자 수:</label>
+            <input type="number" id="extractCount" value="50" min="1">
+            <button onclick="processAndExtract()">랜덤 당첨자 추출</button>
+            
+            <div class="status-bar">
+                남은 추첨 가능 데이터 수: <strong id="remainingCount">0</strong>명
             </div>
-            <p class="status-bar">남은 추첨 가능 데이터 수: <strong id="remainingCount">0</strong>명</p>
         </div>
 
-        <div class="controls">
+        <div class="control-group">
             <h2>3. 현재 추출된 데이터 편집 (임시 당첨자)</h2>
             <div class="action-buttons">
-                <div>
-                    <button onclick="confirmExtractedData()">✅ 확정 및 분리 (추첨 회차 기록)</button>
-                    <button onclick="clearExtractedData()">❌ 취소 및 재추첨</button>
-                </div>
+                <button onclick="confirmExtractedData()">✅ 확정 및 최종 목록으로 분리 (회차 기록)</button>
+                <button onclick="clearExtractedData()" class="delete-button">❌ 임시 목록 비우기 (재추첨)</button>
             </div>
             <div class="result-area" id="extractedDataList">
-                <p>추출된 데이터가 여기에 표 형식으로 표시됩니다.</p>
+                <p>추출된 임시 당첨자 목록이 여기에 표시됩니다.</p>
             </div>
         </div>
         
-        <div class="controls">
-            <h2>4. 최종 확정된 당첨자 목록 (<span id="finalCount">0</span>명, 현재 회차: <span id="currentRoundDisplay">1</span>)</h2>
+        <div class="control-group">
+            <h2>4. 최종 확정된 당첨자 목록 (<span id="finalCount">0</span>명, 현재 진행 회차: <span id="currentRoundDisplay">1</span>)</h2>
             
             <div class="action-buttons-final">
-                <button id="lockToggleButton" onclick="toggleFinalListLock()" class="lock-button">🔒 잠금/수정 해제 🔓</button>
-                <button id="bulkDeleteButton" onclick="bulkDeleteFinalWinners()" class="delete-button" disabled>선택 항목 복수 삭제</button>
-                <button onclick="downloadResult()">최종 목록 엑셀 다운로드</button>
+                <button id="lockToggleButton" onclick="toggleFinalListLock()" class="lock-button">🔒 목록 잠금</button>
+                <button id="bulkDeleteButton" onclick="bulkDeleteFinalWinners()" class="delete-button" disabled>✔ 선택 항목 복수 삭제</button>
+                <button onclick="downloadResult()">엑셀 파일로 최종 목록 다운로드</button>
             </div>
 
             <div class="final-list-area" id="finalDataList">
-                <p>확정된 당첨자는 여기에 표 형식으로 표시됩니다.</p>
+                <p>확정된 당첨자 목록이 여기에 표시됩니다.</p>
             </div>
             <div class="add-data-input">
-                <input type="text" id="finalDataInput" placeholder="최종 목록에 수동 추가 (예: 컬럼A: 값1, 컬럼B: 값2)" disabled>
-                <button id="addFinalDataButton" onclick="addFinalData()" disabled>수동 추가</button>
+                <input type="text" id="finalDataInput" placeholder="수동 추가 (예: 컬럼A: 값1, 컬럼B: 값2)" disabled>
+                <button id="addFinalDataButton" onclick="addFinalData()" disabled>+ 수동 추가</button>
             </div>
         </div>
     </div>
@@ -132,8 +438,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             updateRemainingCount();
             document.getElementById('currentRoundDisplay').textContent = currentRound;
+            
             // 초기 상태로 버튼 비활성화 및 입력창 잠금 설정
-            document.getElementById('lockToggleButton').textContent = '🔒 잠금/수정 해제 🔓';
+            document.getElementById('lockToggleButton').textContent = '🔒 목록 잠금';
+            document.getElementById('lockToggleButton').classList.remove('unlocked');
             document.getElementById('bulkDeleteButton').disabled = true;
             document.getElementById('finalDataInput').disabled = true;
             document.getElementById('addFinalDataButton').disabled = true;
@@ -168,7 +476,7 @@
             const duplicatedCount = initialData.length - availableData.length;
             const fileStatus = document.getElementById('fileStatus');
 
-            fileStatus.textContent = `파일이 로드되었고, 현재 선택된 기준으로 **${duplicatedCount}개**의 중복이 제거되어 ${availableData.length}개 고유 데이터가 추첨 가능합니다.`;
+            fileStatus.textContent = `파일이 로드되었고, 현재 선택된 기준으로 **${duplicatedCount}개**의 중복이 제거되어 **${availableData.length}개** 고유 데이터가 추첨 가능합니다.`;
             fileStatus.style.display = 'block';
             fileStatus.classList.remove('error');
 
@@ -244,9 +552,9 @@
                         finalWinners = []; // 새 파일 로드 시 최종 목록 초기화
                         currentRound = 1; // 새 파일 로드 시 회차 초기화
                         
-                        updateDuplicateStatus(); // 초기 중복 제거 상태 업데이트
+                        updateDuplicateStatus(); // 초기 중복 제거 상태 업데이트 (파일 로드 시 한 번 실행)
 
-                        renderFinalData(); 
+                        renderFinalData(); // 최종 목록 비우기 (새 파일 로드 시)
 
                     } else {
                         fileStatus.textContent = '엑셀 파일에 데이터가 없거나 형식이 올바르지 않습니다.';
@@ -379,7 +687,7 @@
             extractedDataListDiv.innerHTML = ''; 
 
             if (extractedData.length === 0) {
-                extractedDataListDiv.innerHTML = '<p style="padding: 15px;">추출된 데이터가 없습니다. (랜덤 추출 버튼을 누르거나, 취소 후 데이터가 초기화됨)</p>';
+                extractedDataListDiv.innerHTML = '<p style="padding: 15px;">추출된 임시 당첨자 목록이 여기에 표시됩니다.</p>';
                 return;
             }
 
@@ -391,7 +699,7 @@
             finalDataListDiv.innerHTML = ''; 
 
             if (finalWinners.length === 0) {
-                finalDataListDiv.innerHTML = '<p style="padding: 15px;">확정된 당첨자가 없습니다.</p>';
+                finalDataListDiv.innerHTML = '<p style="padding: 15px;">확정된 당첨자 목록이 여기에 표시됩니다.</p>';
                 return;
             }
 
@@ -412,7 +720,19 @@
             // 헤더 행 생성
             const headerRow = thead.insertRow();
             if (!isExtractedList) {
-                 headerRow.insertCell().textContent = '선택'; // 복수 삭제용 체크박스
+                 const selectAllHeader = document.createElement('th');
+                 const selectAllCheckbox = document.createElement('input');
+                 selectAllCheckbox.type = 'checkbox';
+                 selectAllCheckbox.id = 'selectAllFinalWinners';
+                 selectAllCheckbox.disabled = isFinalListLocked;
+                 selectAllCheckbox.addEventListener('change', (e) => {
+                     const checkboxes = document.querySelectorAll('input[name="finalWinnerSelection"]');
+                     checkboxes.forEach(cb => {
+                         if (!cb.disabled) cb.checked = e.target.checked;
+                     });
+                 });
+                 selectAllHeader.appendChild(selectAllCheckbox);
+                 headerRow.appendChild(selectAllHeader);
             }
             headerRow.insertCell().textContent = 'No.';
             displayHeaders.forEach(header => {
@@ -431,257 +751,3 @@
                     checkbox.type = 'checkbox';
                     checkbox.name = 'finalWinnerSelection';
                     checkbox.value = index; // 인덱스를 값으로 사용
-                    checkbox.disabled = isFinalListLocked; // 잠금 상태에 따라 비활성화
-                    checkboxCell.appendChild(checkbox);
-                }
-
-                dataRow.insertCell().textContent = index + 1; // No.
-
-                displayHeaders.forEach(header => {
-                    const cell = dataRow.insertCell();
-                    
-                    const input = document.createElement('input');
-                    input.type = 'text';
-                    input.classList.add('data-input');
-                    
-                    if (!isExtractedList) { // 최종 목록 (Final List)
-                        input.disabled = isFinalListLocked; // 잠금 상태에 따라 비활성화
-                        if (header === 'Winning Round' || header === 'Entry Method') {
-                            input.value = item[header] || '';
-                            input.readOnly = true; 
-                            input.style.backgroundColor = '#f0f0f0';
-                        } else {
-                            input.value = item[header] || '';
-                            input.onchange = (e) => {
-                                item[header] = e.target.value.trim();
-                            };
-                        }
-                    } else { // 임시 추출 목록 (Extracted List)
-                        input.value = item[header] || '';
-                        input.onchange = (e) => {
-                            item[header] = e.target.value.trim();
-                        };
-                    }
-                    
-                    cell.appendChild(input);
-                });
-
-                // 관리 버튼 셀
-                const actionsCell = dataRow.insertCell();
-                actionsCell.classList.add('col-actions');
-                const deleteButton = document.createElement('button');
-                deleteButton.textContent = '삭제';
-                
-                if (!isExtractedList) {
-                    deleteButton.disabled = isFinalListLocked; // 최종 목록일 경우 잠금 상태에 따라 비활성화
-                    deleteButton.classList.add('delete-button');
-                }
-                
-                deleteButton.onclick = () => {
-                    if (isExtractedList) {
-                        deleteData(extractedData, index, renderExtractedData);
-                    } else if (!isFinalListLocked) {
-                        const deletedItem = deleteData(finalWinners, index, renderFinalData);
-                        if (deletedItem && deletedItem['Entry Method'] === 'Random Draw') {
-                            initialData.push(deletedItem); 
-                            updateDuplicateStatus(); // 중복 상태 업데이트
-                            alert('확정 목록에서 삭제되었습니다. 해당 데이터는 이제 재추첨 가능합니다.');
-                        } else if (deletedItem && deletedItem['Entry Method'] === 'Manual Add') {
-                            updateDuplicateStatus(); // 중복 상태 업데이트
-                            alert('수동 추가된 항목이 최종 목록에서 삭제되었습니다.');
-                        }
-                    }
-                };
-                actionsCell.appendChild(deleteButton);
-            });
-
-            return table;
-        }
-
-        // 데이터 삭제 로직 (재활용)
-        function deleteData(dataArray, index, renderCallback) {
-            const deletedItem = dataArray.splice(index, 1)[0];
-            renderCallback();
-            return deletedItem;
-        }
-
-        // 현재 추출된 데이터를 최종 목록으로 확정하고 원본에서 제거
-        function confirmExtractedData() {
-            if (extractedData.length === 0) {
-                alert('확정할 추출된 데이터가 없습니다.');
-                return;
-            }
-            if (!isFinalListLocked) {
-                alert('경고: 최종 목록이 수정 해제 상태입니다. 데이터를 보호하기 위해 먼저 목록을 잠근 후 확정해주세요.');
-                return;
-            }
-
-            const currentRoundNumber = currentRound;
-            
-            // 1. 최종 목록에 추가 (회차 정보와 방법을 추가)
-            const winnersToConfirm = extractedData.map(item => {
-                // 기존 item을 복사하여 새로운 필드를 추가
-                const newItem = { ...item };
-                newItem['Winning Round'] = currentRoundNumber;
-                newItem['Entry Method'] = 'Random Draw';
-                return newItem;
-            });
-            finalWinners.push(...winnersToConfirm);
-
-            // 2. 원본 데이터 (initialData)에서 추출된 데이터를 제거합니다.
-            const selectedKeys = Array.from(document.querySelectorAll('input[name="duplicateKey"]:checked')).map(cb => cb.value);
-            if (selectedKeys.length > 0) {
-                const extractedKeys = new Set(extractedData.map(row => 
-                    selectedKeys.map(k => String(row[k] || '').trim().toLowerCase()).join('|||')
-                ));
-
-                initialData = initialData.filter(row => {
-                    const key = selectedKeys.map(k => String(row[k] || '').trim().toLowerCase()).join('|||');
-                    return !extractedKeys.has(key);
-                });
-            } else {
-                alert('경고: 중복 제거 기준이 선택되지 않아, 원본 데이터에서 정확한 항목 제거가 어렵습니다. 최종 목록에만 추가하고, 원본 데이터는 그대로 유지됩니다.');
-            }
-
-            // 3. 추출된 목록 비우기 및 다음 회차로 증가
-            extractedData = [];
-            currentRound++; // 회차 증가
-            updateDuplicateStatus(); // 중복 상태 및 추첨 가능 데이터 갱신
-
-            // 4. UI 갱신
-            renderExtractedData();
-            renderFinalData();
-            alert(`총 ${finalWinners.length}명의 당첨자가 최종 확정되었습니다. 다음 추첨은 ${currentRound}회차로 진행됩니다.`);
-        }
-        
-        // 현재 추출된 데이터를 취소하고 재추첨 가능한 데이터로 되돌림
-        function clearExtractedData() {
-            if (extractedData.length === 0) return;
-            
-            extractedData = [];
-            renderExtractedData();
-            alert('현재 추출된 목록이 취소되었습니다. 다시 추출 버튼을 눌러주세요.');
-        }
-
-        // --- 최종 목록 관리 기능 ---
-
-        // 최종 목록 잠금/해제 토글
-        function toggleFinalListLock() {
-            isFinalListLocked = !isFinalListLocked;
-            const lockButton = document.getElementById('lockToggleButton');
-            const bulkDeleteButton = document.getElementById('bulkDeleteButton');
-            const finalDataInput = document.getElementById('finalDataInput');
-            const addFinalDataButton = document.getElementById('addFinalDataButton');
-
-            if (isFinalListLocked) {
-                lockButton.textContent = '🔒 잠금/수정 해제 🔓';
-                lockButton.style.backgroundColor = '#ffc107';
-                bulkDeleteButton.disabled = true;
-                finalDataInput.disabled = true;
-                addFinalDataButton.disabled = true;
-                alert('최종 목록이 잠금 상태로 설정되어 데이터 보호 중입니다.');
-            } else {
-                lockButton.textContent = '🔓 수정 해제/잠금 🔒';
-                lockButton.style.backgroundColor = '#28a745';
-                bulkDeleteButton.disabled = false;
-                finalDataInput.disabled = false;
-                addFinalDataButton.disabled = false;
-                alert('최종 목록이 수정 해제되었습니다. 이제 수정, 삭제, 수동 추가가 가능합니다.');
-            }
-
-            // UI 전체를 다시 렌더링하여 Disabled 상태를 반영
-            renderFinalData(); 
-        }
-
-        // 최종 확정 목록에 수동 추가
-        function addFinalData() {
-            if (isFinalListLocked) return; // 잠금 상태에서는 실행 불가
-
-            const newDataInput = document.getElementById('finalDataInput');
-            const newValueString = newDataInput.value.trim();
-
-            if (newValueString) {
-                const parts = newValueString.split(',').map(part => part.trim()).filter(part => part.includes(':'));
-                let newObject = {};
-                let isValid = true;
-
-                parts.forEach(part => {
-                    const match = part.match(/(.+?)\s*:\s*(.*)/); 
-                    if (match && match[1] && match[2]) {
-                        const key = match[1].trim();
-                        const value = match[2].trim();
-                        newObject[key] = value;
-                    } else {
-                        isValid = false;
-                    }
-                });
-                
-                if (Object.keys(newObject).length > 0 && isValid) {
-                    newObject['Winning Round'] = 'Manual';
-                    newObject['Entry Method'] = 'Manual Add';
-
-                    finalWinners.push(newObject);
-                    updateDuplicateStatus(); 
-
-                    newDataInput.value = ''; 
-                    renderFinalData();
-                    alert('데이터가 최종 목록에 수동으로 추가되었습니다.');
-                } else {
-                    alert('유효한 "컬럼: 값" 쌍(예: 텔레그램 ID: @user, 핸드폰 번호: 010-...)을 입력해주세요.');
-                }
-            }
-        }
-        
-        // 선택된 항목 복수 삭제
-        function bulkDeleteFinalWinners() {
-            if (isFinalListLocked) return; // 잠금 상태에서는 실행 불가
-            
-            const checkboxes = document.querySelectorAll('input[name="finalWinnerSelection"]:checked');
-            if (checkboxes.length === 0) {
-                alert('삭제할 항목을 1개 이상 선택해주세요.');
-                return;
-            }
-
-            if (!confirm(`선택된 ${checkboxes.length}개의 항목을 정말로 삭제하시겠습니까?`)) {
-                return;
-            }
-            
-            // 선택된 인덱스를 내림차순으로 정렬하여 삭제 (인덱스가 밀리는 것을 방지)
-            const indicesToDelete = Array.from(checkboxes).map(cb => parseInt(cb.value)).sort((a, b) => b - a);
-
-            let restoredCount = 0;
-            indicesToDelete.forEach(index => {
-                const deletedItem = finalWinners.splice(index, 1)[0];
-                
-                // 추첨으로 당첨된 항목만 원본 데이터에 복구
-                if (deletedItem && deletedItem['Entry Method'] === 'Random Draw') {
-                    initialData.push(deletedItem);
-                    restoredCount++;
-                }
-            });
-
-            updateDuplicateStatus(); // 중복 상태 및 추첨 가능 데이터 갱신
-            renderFinalData(); // UI 갱신
-
-            alert(`${indicesToDelete.length}개 항목이 삭제되었고, 그 중 ${restoredCount}개가 재추첨 가능 데이터로 복구되었습니다.`);
-        }
-
-        // 결과 엑셀 다운로드 (최종 확정 목록만)
-        function downloadResult() {
-            if (finalWinners.length === 0) {
-                alert('다운로드할 최종 확정 데이터가 없습니다.');
-                return;
-            }
-
-            const exportData = finalWinners.map((item, index) => {
-                 return { "No.": index + 1, ...item };
-            });
-
-            const ws = XLSX.utils.json_to_sheet(exportData);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "최종_당첨자_목록");
-            XLSX.writeFile(wb, "최종_당첨자_목록.xlsx");
-        }
-    </script>
-</body>
-</html>
