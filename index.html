@@ -44,7 +44,7 @@
 
         <div class="controls">
             <h2>2. 중복 제거 및 추출 설정</h2>
-            <div class="column-select-tip">💡 파일을 업로드하고 버튼을 누르면, 이 아래에 실제 컬럼명이 표시됩니다.</div>
+            <div class="column-select-tip">💡 파일을 업로드하고 버튼을 누르면, 이 아래에 실제 컬럼명이 표시됩니다. (파일명에 따라 한글이 깨질 수 있으니 .xlsx 파일 사용 권장)</div>
             
             <div class="control-group">
                 <label>중복 제거 기준 컬럼 선택 (최대 2개):</label>
@@ -115,17 +115,27 @@
             reader.onload = function(e) {
                 try {
                     const data = new Uint8Array(e.target.result);
+                    // XLSX 라이브러리를 사용하여 파일을 읽습니다. (인코딩 문제 발생 시 파일 형식을 XLSX로 변경 권장)
                     const workbook = XLSX.read(data, { type: 'array' });
                     const sheetName = workbook.SheetNames[0]; 
                     const worksheet = workbook.Sheets[sheetName];
-                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    // raw: true 옵션으로 데이터를 가져와서, 숫자/날짜 등을 문자열로 변환하지 않도록 합니다.
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false }); 
 
                     if (json.length > 0) {
-                        // 실제 헤더 추출 및 전역 변수에 저장
-                        availableHeaders = json[0].map(h => h ? String(h).trim() : '').filter(h => h.length > 0);
+                        // 실제 헤더 추출 및 전역 변수에 저장 (공백/null 값 제거 및 trim 처리)
+                        availableHeaders = json[0]
+                            .map(h => h ? String(h).trim() : '')
+                            .filter(h => h.length > 0);
                         
                         // 컬럼 선택 UI 동적 생성
                         checkboxContainer.innerHTML = '';
+                        if (availableHeaders.length === 0) {
+                             checkboxContainer.innerHTML = '<p>유효한 컬럼 헤더를 찾을 수 없습니다. 파일 형식을 확인해주세요.</p>';
+                             return;
+                        }
+                        
                         availableHeaders.forEach(header => {
                             const label = document.createElement('label');
                             label.innerHTML = `<input type="checkbox" name="duplicateKey" value="${header}"> ${header}`;
@@ -133,10 +143,10 @@
                         });
                         setupCheckboxLimit(); // 새로 생성된 체크박스에 제한 로직 적용
 
-                        // 이 단계에서 데이터도 미리 저장해 둡니다.
+                        // 데이터 파싱 및 저장
                         allProcessedData = parseJsonToObjects(json, availableHeaders);
                         
-                        fileStatus.textContent = `파일 "${file.name}"이 성공적으로 로드되었습니다. ${availableHeaders.length}개 컬럼이 확인되었습니다.`;
+                        fileStatus.textContent = `파일 "${file.name}"이 성공적으로 로드되었습니다. 총 ${availableHeaders.length}개 컬럼, ${allProcessedData.length}개 행이 확인되었습니다.`;
                         fileStatus.style.display = 'block';
                         fileStatus.classList.remove('error');
 
@@ -147,7 +157,7 @@
                     }
                 } catch (error) {
                     console.error(`Error reading file:`, error);
-                    fileStatus.textContent = `파일 처리 중 오류 발생: ${error.message}`;
+                    fileStatus.textContent = `파일 처리 중 오류 발생: ${error.message}. 파일 형식이 올바른지 확인해주세요.`;
                     fileStatus.classList.add('error');
                     fileStatus.style.display = 'block';
                 }
@@ -161,10 +171,20 @@
             for (let j = 1; j < json.length; j++) {
                 const row = json[j];
                 let rowObject = {};
+                let hasData = false;
+                
                 headers.forEach((header, index) => {
-                    rowObject[header] = row[index] !== undefined && row[index] !== null ? row[index] : ''; 
+                    // 모든 값을 문자열로 변환하여 저장
+                    const value = row[index] !== undefined && row[index] !== null ? String(row[index]).trim() : ''; 
+                    rowObject[header] = value;
+                    if (value.length > 0) {
+                        hasData = true; // 빈 행 제외를 위해
+                    }
                 });
-                data.push(rowObject);
+                
+                if (hasData) {
+                   data.push(rowObject);
+                }
             }
             return data;
         }
@@ -177,8 +197,8 @@
             
             fileStatus.style.display = 'none';
 
-            if (allProcessedData.length === 0) {
-                fileStatus.textContent = '먼저 파일을 로드하여 데이터를 준비해주세요.';
+            if (allProcessedData.length === 0 || availableHeaders.length === 0) {
+                fileStatus.textContent = '먼저 파일을 로드하고 컬럼을 확인해주세요.';
                 fileStatus.classList.add('error');
                 fileStatus.style.display = 'block';
                 return;
@@ -199,10 +219,11 @@
             // 1. 중복 제거 실행
             const uniqueData = {};
             allProcessedData.forEach(row => {
-                // 중복 제거 키 생성: 선택된 1개 또는 2개 컬럼의 값을 결합
-                const uniqueKey = selectedKeys.map(key => String(row[key] || '').trim().toLowerCase()).join('|||');
+                // 중복 제거 키 생성: 선택된 1개 또는 2개 컬럼의 값을 소문자/trim하여 결합
+                const uniqueKeyParts = selectedKeys.map(key => String(row[key] || '').trim().toLowerCase());
+                const uniqueKey = uniqueKeyParts.join('|||');
                 
-                // 키가 존재하고 비어있지 않은 경우에만 저장
+                // 키가 존재하고 (모두 빈 값이 아닌 경우)에만 저장
                 if (uniqueKey.replace(/\|\|\|/g, '').length > 0) {
                     uniqueData[uniqueKey] = row; 
                 }
@@ -221,13 +242,13 @@
             // 3. 결과 표시
             renderExtractedData();
             
-            fileStatus.textContent = `총 ${finalUniqueData.length}개의 고유 데이터 중 ${extractedData.length}개를 성공적으로 추출했습니다.`;
+            fileStatus.textContent = `총 ${finalUniqueData.length}개의 고유 데이터 중 ${extractedData.length}개를 성공적으로 추출했습니다. 이제 데이터를 편집할 수 있습니다.`;
             fileStatus.classList.remove('error');
             fileStatus.style.display = 'block';
         }
 
 
-        // 추출된 데이터를 화면에 렌더링 (이전 로직 유지)
+        // 추출된 데이터를 화면에 렌더링
         function renderExtractedData() {
             const extractedDataListDiv = document.getElementById('extractedDataList');
             extractedDataListDiv.innerHTML = ''; 
@@ -244,13 +265,13 @@
 
                 const inputField = document.createElement('input');
                 inputField.type = 'text';
+                
                 // 객체를 "키: 값, 키: 값" 문자열로 표시
                 inputField.value = Object.entries(item)
                                        .filter(([key, value]) => value !== undefined && value !== null && String(value).trim() !== '') 
                                        .map(([key, value]) => `${key}: ${value}`)
                                        .join(', ');
                 
-                // 사용자가 텍스트를 수정하면 extractedData를 업데이트할 준비
                 inputField.onchange = (e) => updateData(index, e.target.value); 
 
                 const controlButtonsDiv = document.createElement('div');
@@ -273,7 +294,8 @@
             const parts = newValueString.split(',').map(part => part.trim()).filter(part => part.includes(':'));
             let updatedObject = {};
             parts.forEach(part => {
-                const [key, value] = part.split(':').map(s => s.trim());
+                // ':' 기준으로 키와 값을 분리
+                const [key, value] = part.split(/:(.*)/s).map(s => s.trim()).filter(s => s.length > 0);
                 if (key && value) {
                     updatedObject[key] = value;
                 }
@@ -299,7 +321,7 @@
                 const parts = newValueString.split(',').map(part => part.trim()).filter(part => part.includes(':'));
                 let newObject = {};
                 parts.forEach(part => {
-                    const [key, value] = part.split(':').map(s => s.trim());
+                    const [key, value] = part.split(/:(.*)/s).map(s => s.trim()).filter(s => s.length > 0);
                     if (key && value) {
                         newObject[key] = value;
                     }
@@ -322,7 +344,7 @@
                 return;
             }
 
-            // 모든 항목을 별도 컬럼으로 분리하여 저장
+            // 다운로드 시 각 키를 별도 컬럼으로 분리하여 저장
             const exportData = extractedData.map(item => {
                  return { ...item };
             });
