@@ -3,19 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>단일 엑셀 파일 중복 제거 및 랜덤 추출 도구</title>
+    <title>단일 엑셀 파일 중복 제거 및 당첨자 분리 추출 도구</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; background-color: #f4f4f4; color: #333; }
         .container { max-width: 1000px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        h1, h2 { color: #0056b3; }
+        h1, h2, h3 { color: #0056b3; }
         input[type="file"] { margin-bottom: 15px; display: block; }
         button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-right: 10px; }
         button:hover { background-color: #0056b3; }
-        .result-area { margin-top: 20px; padding: 15px; border: 1px solid #ddd; background-color: #e9ecef; border-radius: 5px; max-height: 400px; overflow-y: auto; }
-        .result-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #ccc; }
-        .result-item:last-child { border-bottom: none; }
-        .result-item input[type="text"] { flex-grow: 1; margin-right: 10px; padding: 5px; border: 1px solid #ccc; border-radius: 3px; }
+        .result-area, .final-list-area { margin-top: 20px; padding: 15px; border: 1px solid #ddd; background-color: #e9ecef; border-radius: 5px; max-height: 400px; overflow-y: auto; }
+        .final-list-area { background-color: #e0f7fa; border-color: #00bcd4; margin-top: 15px; }
+        .result-item, .final-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #ccc; }
+        .result-item:last-child, .final-item:last-child { border-bottom: none; }
+        .result-item input[type="text"], .final-item input[type="text"] { flex-grow: 1; margin-right: 10px; padding: 5px; border: 1px solid #ccc; border-radius: 3px; }
         .control-buttons button { padding: 5px 10px; font-size: 14px; margin-left: 5px; }
         .controls { margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; }
         .control-group { margin-bottom: 15px; }
@@ -28,12 +29,13 @@
         .feedback { margin-top: 15px; padding: 10px; background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 5px; display: none; }
         .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .column-select-tip { font-size: 0.9em; color: gray; margin-bottom: 10px; }
+        .action-buttons { margin-top: 15px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>단일 엑셀 파일 중복 제거 및 랜덤 추출 도구</h1>
-        <p>엑셀 파일을 1개 업로드한 후, 실제 컬럼 이름을 기준으로 중복을 제거하고 데이터를 추출합니다.</p>
+        <h1>단일 엑셀 파일 중복 제거 및 당첨자 분리 추출 도구</h1>
+        <p>엑셀 파일을 1개 업로드한 후, 컬럼 기준으로 중복을 제거하고 데이터를 추출합니다. 확정된 당첨자는 원본 데이터에서 제외되어 다음 추첨에 사용되지 않습니다.</p>
 
         <div class="control-group">
             <label for="fileInput">1. 엑셀 파일 선택 (1개만 선택 가능)</label>
@@ -44,7 +46,7 @@
 
         <div class="controls">
             <h2>2. 중복 제거 및 추출 설정</h2>
-            <div class="column-select-tip">💡 파일을 업로드하고 버튼을 누르면, 이 아래에 실제 컬럼명이 표시됩니다. (파일명에 따라 한글이 깨질 수 있으니 .xlsx 파일 사용 권장)</div>
+            <div class="column-select-tip">💡 파일을 업로드하고 버튼을 누르면, 이 아래에 실제 컬럼명이 표시됩니다. (.xlsx 파일 사용 권장)</div>
             
             <div class="control-group">
                 <label>중복 제거 기준 컬럼 선택 (최대 2개):</label>
@@ -55,29 +57,47 @@
             
             <div class="control-group">
                 <label for="extractCount">추출할 데이터 개수:</label>
-                <input type="number" id="extractCount" value="100" min="1">
+                <input type="number" id="extractCount" value="50" min="1">
                 <button onclick="processAndExtract()">랜덤 추출</button>
             </div>
+            <p>남은 추첨 가능 데이터 수: <strong id="remainingCount">0</strong>명</p>
         </div>
 
         <div class="controls">
-            <h2>3. 추출된 데이터 편집 및 결과</h2>
+            <h2>3. 현재 추출된 데이터 편집 (임시 당첨자)</h2>
             <div class="result-area" id="extractedDataList">
                 <p>추출된 데이터가 여기에 표시됩니다.</p>
             </div>
-            
-            <div class="add-data-input">
-                <input type="text" id="newDataInput" placeholder="추가할 데이터 (예: 컬럼A: 값1, 컬럼B: 값2, ...)">
-                <button onclick="addData()">추가</button>
+            <div class="action-buttons">
+                <button onclick="confirmExtractedData()">✅ 확정 및 분리</button>
+                <button onclick="clearExtractedData()">❌ 취소 및 재추첨</button>
             </div>
-            <button onclick="downloadResult()">결과 엑셀 다운로드</button>
+        </div>
+        
+        <div class="controls">
+            <h2>4. 최종 확정된 당첨자 목록 (<span id="finalCount">0</span>명)</h2>
+            <div class="final-list-area" id="finalDataList">
+                <p>확정된 당첨자는 여기에 표시됩니다.</p>
+            </div>
+            <div class="add-data-input">
+                <input type="text" id="finalDataInput" placeholder="최종 목록에 수동 추가 (예: 컬럼A: 값1, 컬럼B: 값2, ...)">
+                <button onclick="addFinalData()">추가</button>
+            </div>
+            <button onclick="downloadResult()">최종 목록 엑셀 다운로드</button>
         </div>
     </div>
 
     <script>
-        let allProcessedData = []; 
-        let extractedData = [];   
-        let availableHeaders = []; // 엑셀 파일에서 읽어온 실제 컬럼 이름 저장
+        let initialData = [];       // 파일에서 읽어온 원본 데이터 (중복 제거 전)
+        let availableData = [];     // 현재 추첨 가능한 데이터 (확정 목록 제외)
+        let extractedData = [];     // 현재 추출되어 임시로 보여지는 데이터
+        let finalWinners = [];      // 최종 확정된 당첨자 데이터
+        let availableHeaders = [];  // 엑셀 파일에서 읽어온 실제 컬럼 이름 저장
+
+        // 초기 남은 데이터 수 업데이트
+        document.addEventListener('DOMContentLoaded', () => {
+            updateRemainingCount();
+        });
 
         // 체크박스 선택 제한 로직 (최대 2개)
         function setupCheckboxLimit() {
@@ -92,7 +112,13 @@
                 });
             });
         }
-        
+
+        // 남은 데이터 수 업데이트
+        function updateRemainingCount() {
+            document.getElementById('remainingCount').textContent = availableData.length;
+            document.getElementById('finalCount').textContent = finalWinners.length;
+        }
+
         // --- 1단계: 파일 로드 및 컬럼 표시 ---
         function loadFileAndShowColumns() {
             const fileInput = document.getElementById('fileInput');
@@ -115,21 +141,14 @@
             reader.onload = function(e) {
                 try {
                     const data = new Uint8Array(e.target.result);
-                    // XLSX 라이브러리를 사용하여 파일을 읽습니다. (인코딩 문제 발생 시 파일 형식을 XLSX로 변경 권장)
                     const workbook = XLSX.read(data, { type: 'array' });
                     const sheetName = workbook.SheetNames[0]; 
                     const worksheet = workbook.Sheets[sheetName];
-                    
-                    // raw: true 옵션으로 데이터를 가져와서, 숫자/날짜 등을 문자열로 변환하지 않도록 합니다.
                     const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false }); 
 
                     if (json.length > 0) {
-                        // 실제 헤더 추출 및 전역 변수에 저장 (공백/null 값 제거 및 trim 처리)
-                        availableHeaders = json[0]
-                            .map(h => h ? String(h).trim() : '')
-                            .filter(h => h.length > 0);
+                        availableHeaders = json[0].map(h => h ? String(h).trim() : '').filter(h => h.length > 0);
                         
-                        // 컬럼 선택 UI 동적 생성
                         checkboxContainer.innerHTML = '';
                         if (availableHeaders.length === 0) {
                              checkboxContainer.innerHTML = '<p>유효한 컬럼 헤더를 찾을 수 없습니다. 파일 형식을 확인해주세요.</p>';
@@ -141,14 +160,16 @@
                             label.innerHTML = `<input type="checkbox" name="duplicateKey" value="${header}"> ${header}`;
                             checkboxContainer.appendChild(label);
                         });
-                        setupCheckboxLimit(); // 새로 생성된 체크박스에 제한 로직 적용
+                        setupCheckboxLimit();
 
-                        // 데이터 파싱 및 저장
-                        allProcessedData = parseJsonToObjects(json, availableHeaders);
-                        
-                        fileStatus.textContent = `파일 "${file.name}"이 성공적으로 로드되었습니다. 총 ${availableHeaders.length}개 컬럼, ${allProcessedData.length}개 행이 확인되었습니다.`;
+                        // 초기 데이터 저장 및 중복 제거
+                        initialData = parseJsonToObjects(json, availableHeaders);
+                        availableData = removeDuplicates(initialData, []); // 초기에는 확정 목록이 없으므로 빈 배열 전달
+
+                        fileStatus.textContent = `파일 "${file.name}"이 성공적으로 로드되었습니다. 총 ${availableHeaders.length}개 컬럼이 확인되었습니다.`;
                         fileStatus.style.display = 'block';
                         fileStatus.classList.remove('error');
+                        updateRemainingCount();
 
                     } else {
                         fileStatus.textContent = '엑셀 파일에 데이터가 없습니다.';
@@ -157,7 +178,7 @@
                     }
                 } catch (error) {
                     console.error(`Error reading file:`, error);
-                    fileStatus.textContent = `파일 처리 중 오류 발생: ${error.message}. 파일 형식이 올바른지 확인해주세요.`;
+                    fileStatus.textContent = `파일 처리 중 오류 발생: ${error.message}. 파일 형식을 확인해주세요.`;
                     fileStatus.classList.add('error');
                     fileStatus.style.display = 'block';
                 }
@@ -174,11 +195,10 @@
                 let hasData = false;
                 
                 headers.forEach((header, index) => {
-                    // 모든 값을 문자열로 변환하여 저장
                     const value = row[index] !== undefined && row[index] !== null ? String(row[index]).trim() : ''; 
                     rowObject[header] = value;
                     if (value.length > 0) {
-                        hasData = true; // 빈 행 제외를 위해
+                        hasData = true;
                     }
                 });
                 
@@ -187,6 +207,38 @@
                 }
             }
             return data;
+        }
+        
+        // 중복 제거 로직 (확정 목록과도 비교)
+        function removeDuplicates(dataArray, excludeArray) {
+             const selectedKeys = Array.from(document.querySelectorAll('input[name="duplicateKey"]:checked')).map(cb => cb.value);
+
+             if (selectedKeys.length === 0) {
+                 // 중복 키를 선택하지 않은 경우, 원본 데이터에서 빈 데이터만 제거하고 반환
+                 return dataArray.filter(row => Object.values(row).some(v => String(v).trim().length > 0));
+             }
+
+             const uniqueData = {};
+             
+             // 1. 확정 목록의 고유 키를 미리 만듭니다.
+             const excludedKeys = new Set();
+             excludeArray.forEach(row => {
+                 const key = selectedKeys.map(k => String(row[k] || '').trim().toLowerCase()).join('|||');
+                 if (key.replace(/\|\|\|/g, '').length > 0) {
+                     excludedKeys.add(key);
+                 }
+             });
+
+             // 2. 입력 데이터에서 중복 및 제외 데이터를 제거합니다.
+             dataArray.forEach(row => {
+                 const key = selectedKeys.map(k => String(row[k] || '').trim().toLowerCase()).join('|||');
+                 
+                 if (key.replace(/\|\|\|/g, '').length > 0 && !excludedKeys.has(key)) {
+                     uniqueData[key] = row; 
+                 }
+             });
+             
+             return Object.values(uniqueData);
         }
 
         // --- 2단계: 중복 제거 및 추출 ---
@@ -197,8 +249,8 @@
             
             fileStatus.style.display = 'none';
 
-            if (allProcessedData.length === 0 || availableHeaders.length === 0) {
-                fileStatus.textContent = '먼저 파일을 로드하고 컬럼을 확인해주세요.';
+            if (availableData.length === 0 || availableHeaders.length === 0) {
+                fileStatus.textContent = '데이터가 로드되지 않았거나, 추첨 가능한 데이터가 없습니다.';
                 fileStatus.classList.add('error');
                 fileStatus.style.display = 'block';
                 return;
@@ -216,37 +268,38 @@
                 return;
             }
 
-            // 1. 중복 제거 실행
-            const uniqueData = {};
-            allProcessedData.forEach(row => {
-                // 중복 제거 키 생성: 선택된 1개 또는 2개 컬럼의 값을 소문자/trim하여 결합
-                const uniqueKeyParts = selectedKeys.map(key => String(row[key] || '').trim().toLowerCase());
-                const uniqueKey = uniqueKeyParts.join('|||');
-                
-                // 키가 존재하고 (모두 빈 값이 아닌 경우)에만 저장
-                if (uniqueKey.replace(/\|\|\|/g, '').length > 0) {
-                    uniqueData[uniqueKey] = row; 
-                }
-            });
-            const finalUniqueData = Object.values(uniqueData);
+            // 1. 현재 availableData에서 중복 제거 및 확정 목록 제외 (재실행)
+            // loadFileAndShowColumns에서 초기 중복 제거를 했지만, 혹시 모를 상황 대비해 다시 실행
+            availableData = removeDuplicates(initialData, finalWinners); 
+            
+            if (availableData.length === 0) {
+                fileStatus.textContent = '추첨 가능한 데이터가 없습니다.';
+                fileStatus.classList.add('error');
+                fileStatus.style.display = 'block';
+                renderExtractedData();
+                return;
+            }
 
             // 2. 랜덤 추출
-            if (extractCount > finalUniqueData.length) {
-                extractedData = [...finalUniqueData];
-                alert(`요청한 개수(${extractCount}개)가 고유 데이터(${finalUniqueData.length}개)보다 많아, 모든 고유 데이터가 추출됩니다.`);
+            let dataToExtract = [...availableData];
+            if (extractCount > dataToExtract.length) {
+                extractedData = dataToExtract;
+                alert(`요청한 개수(${extractCount}개)가 추첨 가능 데이터(${dataToExtract.length}개)보다 많아, 가능한 모든 데이터가 추출됩니다.`);
             } else {
-                const shuffled = [...finalUniqueData].sort(() => 0.5 - Math.random());
+                const shuffled = dataToExtract.sort(() => 0.5 - Math.random());
                 extractedData = shuffled.slice(0, extractCount);
             }
 
             // 3. 결과 표시
             renderExtractedData();
+            updateRemainingCount();
             
-            fileStatus.textContent = `총 ${finalUniqueData.length}개의 고유 데이터 중 ${extractedData.length}개를 성공적으로 추출했습니다. 이제 데이터를 편집할 수 있습니다.`;
+            fileStatus.textContent = `${availableData.length}개의 데이터 중 ${extractedData.length}개를 추출했습니다. 결과를 확정해주세요.`;
             fileStatus.classList.remove('error');
             fileStatus.style.display = 'block';
         }
 
+        // --- 3단계: 추출 목록 관리 ---
 
         // 추출된 데이터를 화면에 렌더링
         function renderExtractedData() {
@@ -254,47 +307,85 @@
             extractedDataListDiv.innerHTML = ''; 
 
             if (extractedData.length === 0) {
-                extractedDataListDiv.innerHTML = '<p>추출된 데이터가 없습니다.</p>';
+                extractedDataListDiv.innerHTML = '<p>추출된 데이터가 없습니다. (랜덤 추출 버튼을 누르거나, 취소 후 데이터가 초기화됨)</p>';
                 return;
             }
 
             extractedData.forEach((item, index) => {
-                const itemDiv = document.createElement('div');
-                itemDiv.classList.add('result-item');
-                itemDiv.dataset.index = index; 
-
-                const inputField = document.createElement('input');
-                inputField.type = 'text';
-                
-                // 객체를 "키: 값, 키: 값" 문자열로 표시
-                inputField.value = Object.entries(item)
-                                       .filter(([key, value]) => value !== undefined && value !== null && String(value).trim() !== '') 
-                                       .map(([key, value]) => `${key}: ${value}`)
-                                       .join(', ');
-                
-                inputField.onchange = (e) => updateData(index, e.target.value); 
-
-                const controlButtonsDiv = document.createElement('div');
-                controlButtonsDiv.classList.add('control-buttons');
-
-                const deleteButton = document.createElement('button');
-                deleteButton.textContent = '삭제';
-                deleteButton.onclick = () => deleteData(index);
-
-                controlButtonsDiv.appendChild(deleteButton);
-                itemDiv.appendChild(document.createTextNode(`${index + 1}. `));
-                itemDiv.appendChild(inputField);
-                itemDiv.appendChild(controlButtonsDiv);
+                const itemDiv = createListItem(item, index, true);
                 extractedDataListDiv.appendChild(itemDiv);
             });
         }
+        
+        // 최종 확정 목록을 화면에 렌더링
+        function renderFinalData() {
+            const finalDataListDiv = document.getElementById('finalDataList');
+            finalDataListDiv.innerHTML = ''; 
 
-        // 데이터 수정 (키:값 파싱)
-        function updateData(index, newValueString) {
+            if (finalWinners.length === 0) {
+                finalDataListDiv.innerHTML = '<p>확정된 당첨자가 없습니다.</p>';
+                return;
+            }
+
+            finalWinners.forEach((item, index) => {
+                const itemDiv = createListItem(item, index, false);
+                finalDataListDiv.appendChild(itemDiv);
+            });
+            updateRemainingCount();
+        }
+
+        // 목록 아이템 생성 헬퍼 함수
+        function createListItem(item, index, isExtractedList) {
+            const itemDiv = document.createElement('div');
+            itemDiv.classList.add(isExtractedList ? 'result-item' : 'final-item');
+
+            const inputField = document.createElement('input');
+            inputField.type = 'text';
+            inputField.value = Object.entries(item)
+                                   .filter(([key, value]) => String(value).trim() !== '') 
+                                   .map(([key, value]) => `${key}: ${value}`)
+                                   .join(', ');
+            
+            // 데이터 수정 이벤트
+            inputField.onchange = (e) => {
+                if (isExtractedList) {
+                    updateData(extractedData, index, e.target.value);
+                } else {
+                    updateData(finalWinners, index, e.target.value);
+                }
+            };
+
+            const controlButtonsDiv = document.createElement('div');
+            controlButtonsDiv.classList.add('control-buttons');
+
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = '삭제';
+            deleteButton.onclick = () => {
+                if (isExtractedList) {
+                    deleteData(extractedData, index, renderExtractedData);
+                } else {
+                    // 최종 목록에서 삭제 시, availableData에 다시 추가될 수 있도록 처리
+                    const deletedItem = deleteData(finalWinners, index, renderFinalData);
+                    if (deletedItem) {
+                       initialData.push(deletedItem); // 원본 데이터에는 다시 포함
+                       availableData = removeDuplicates(initialData, finalWinners); // 추첨 가능 데이터 갱신
+                       updateRemainingCount();
+                    }
+                }
+            };
+
+            controlButtonsDiv.appendChild(deleteButton);
+            itemDiv.appendChild(document.createTextNode(`${index + 1}. `));
+            itemDiv.appendChild(inputField);
+            itemDiv.appendChild(controlButtonsDiv);
+            return itemDiv;
+        }
+
+        // 데이터 수정 로직 (재활용)
+        function updateData(dataArray, index, newValueString) {
             const parts = newValueString.split(',').map(part => part.trim()).filter(part => part.includes(':'));
             let updatedObject = {};
             parts.forEach(part => {
-                // ':' 기준으로 키와 값을 분리
                 const [key, value] = part.split(/:(.*)/s).map(s => s.trim()).filter(s => s.length > 0);
                 if (key && value) {
                     updatedObject[key] = value;
@@ -302,19 +393,68 @@
             });
 
             if (Object.keys(updatedObject).length > 0) {
-                extractedData[index] = updatedObject;
+                dataArray[index] = updatedObject;
             } 
         }
 
-        // 데이터 삭제
-        function deleteData(index) {
-            extractedData.splice(index, 1);
-            renderExtractedData();
+        // 데이터 삭제 로직 (재활용)
+        function deleteData(dataArray, index, renderCallback) {
+            const deletedItem = dataArray.splice(index, 1)[0];
+            renderCallback();
+            return deletedItem;
         }
 
-        // 데이터 추가
-        function addData() {
-            const newDataInput = document.getElementById('newDataInput');
+        // 현재 추출된 데이터를 최종 목록으로 확정하고 원본에서 제거
+        function confirmExtractedData() {
+            if (extractedData.length === 0) {
+                alert('확정할 추출된 데이터가 없습니다.');
+                return;
+            }
+
+            // 1. 최종 목록에 추가
+            finalWinners.push(...extractedData);
+
+            // 2. 원본 데이터 (initialData)에서 추출된 데이터를 제거합니다.
+            const selectedKeys = Array.from(document.querySelectorAll('input[name="duplicateKey"]:checked')).map(cb => cb.value);
+            if (selectedKeys.length > 0) {
+                const extractedKeys = new Set(extractedData.map(row => 
+                    selectedKeys.map(k => String(row[k] || '').trim().toLowerCase()).join('|||')
+                ));
+
+                // initialData에서 추출된 키를 가진 항목을 제거합니다.
+                initialData = initialData.filter(row => {
+                    const key = selectedKeys.map(k => String(row[k] || '').trim().toLowerCase()).join('|||');
+                    return !extractedKeys.has(key);
+                });
+            } else {
+                // 경고: 중복 키가 없으면 정확한 제거가 어렵습니다.
+                alert('경고: 중복 제거 기준이 선택되지 않아, 원본 데이터에서 정확한 항목 제거가 어려울 수 있습니다. 최종 목록에만 추가합니다.');
+            }
+
+            // 3. 추출된 목록 비우기 및 재추첨 가능 데이터 갱신
+            extractedData = [];
+            availableData = removeDuplicates(initialData, finalWinners); 
+
+            // 4. UI 갱신
+            renderExtractedData();
+            renderFinalData();
+            updateRemainingCount();
+            alert(`총 ${finalWinners.length}명의 당첨자가 최종 확정되었습니다. 남은 추첨 가능 데이터: ${availableData.length}명`);
+        }
+        
+        // 현재 추출된 데이터를 취소하고 재추첨 가능한 데이터로 되돌림
+        function clearExtractedData() {
+            if (extractedData.length === 0) return;
+            
+            // 추출된 데이터는 availableData에 이미 포함되어 있으므로, simply extractedData만 비우고 UI 갱신
+            extractedData = [];
+            renderExtractedData();
+            alert('현재 추출된 목록이 취소되었습니다. 다시 추출 버튼을 눌러주세요.');
+        }
+
+        // 최종 확정 목록에 수동 추가
+        function addFinalData() {
+            const newDataInput = document.getElementById('finalDataInput');
             const newValueString = newDataInput.value.trim();
 
             if (newValueString) {
@@ -328,31 +468,34 @@
                 });
                 
                 if (Object.keys(newObject).length > 0) {
-                    extractedData.push(newObject);
+                    finalWinners.push(newObject);
+                    // 수동 추가된 데이터는 initialData와 availableData에서 중복 제거되어야 하지만,
+                    // 이 단계에서는 복잡한 로직을 피하기 위해 finalWinners에만 추가하고 UI 갱신만 합니다.
+                    availableData = removeDuplicates(initialData, finalWinners); 
+
                     newDataInput.value = ''; 
-                    renderExtractedData();
+                    renderFinalData();
                 } else {
                     alert('유효한 "컬럼: 값" 쌍(예: 텔레그램 핸들: @user, 지갑주소: 0x...)을 입력해주세요.');
                 }
             }
         }
 
-        // 결과 엑셀 다운로드
+        // 결과 엑셀 다운로드 (최종 확정 목록만)
         function downloadResult() {
-            if (extractedData.length === 0) {
-                alert('다운로드할 데이터가 없습니다.');
+            if (finalWinners.length === 0) {
+                alert('다운로드할 최종 확정 데이터가 없습니다.');
                 return;
             }
 
-            // 다운로드 시 각 키를 별도 컬럼으로 분리하여 저장
-            const exportData = extractedData.map(item => {
-                 return { ...item };
+            const exportData = finalWinners.map((item, index) => {
+                 return { "번호": index + 1, ...item };
             });
 
             const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "최종_데이터");
-            XLSX.writeFile(wb, "최종_추출_결과.xlsx");
+            XLSX.utils.book_append_sheet(wb, ws, "최종_당첨자_목록");
+            XLSX.writeFile(wb, "최종_당첨자_목록.xlsx");
         }
     </script>
 </body>
